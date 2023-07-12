@@ -1,0 +1,68 @@
+# Client and world configuration
+host: localhost
+port: 2000
+world: Town02
+traffic_manager_port: 8000
+traffic_manager_seed: 0
+timeout: 300.0
+vehicle_model: model3
+
+# Routes and Scenario configuration
+routes: "/home/jimmy/CARLA/leaderboard/data/routes_devtest.xml"
+repetitions: 1
+
+# Camera sensor configuration
+cam_w: 800
+cam_h: 600
+cam_fov: "120"
+
+# Radar sensor configuration
+radar_h_fov: "120"
+radar_v_fov: "30"
+radar_pps: 2000   # points per second
+radar_range: 100
+
+# Lidar sensor configuration
+noise_stddev: "0.2"
+channels: "32"
+range: "50"
+rotation_frequency: "10"
+lidar_fov_lower: "-60"
+lidar_fov_upper: "0"
+lidar_pps: "16000"  # points per second, 16000 = 32 channels * 50 points per channel * 10 Hz
+max_points_stored: 200
+max_points_each_time: 50
+
+
+# Training configuration
+model_config: "/home/jimmy/Desktop/CARLA_PROJ/Models/config_model.yaml"
+batch_size: 8
+learning_rate: 0.0001
+gamma: 0.98
+memory_size: 1000
+memory_save_freq: 2000
+cache_size: 10
+epsilon: 0.3
+epsilon_min: 0.1
+epsilon_decay: 0.999
+target_model_update_freq: 5000
+env_model_update_freq: 50
+moving_average_window: 100
+show_freq: 100
+log_freq: 500
+log_dir: "/home/jimmy/Desktop/CARLA_PROJ/Logs"
+save_freq: 1000
+save_dir: "/home/jimmy/Desktop/CARLA_PROJ/Checkpoints"
+
+
+# display
+display: True
+show_window: False
+show_waypoints: True
+show_lidar: True
+show_xyz: False
+
+# Other
+reach_threshold: 2.5
+device: "cuda"
+n_other_actors: 45

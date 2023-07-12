@@ -1,0 +1,21 @@
+# Training configuration
+model_config: "/home/jimmy/Desktop/CARLA_PROJ/Models/config_model.yaml"
+data_folders:
+  - "/media/jimmy/MyData/Data/carla/20230712-053225"
+  - "/media/jimmy/MyData/Data/carla/20230712-080704"
+batch_size: 32
+learning_rate: 0.001
+gamma: 0.98
+memory_size: 500
+cache_size: 10
+epsilon: 0.5
+epsilon_min: 0.1
+epsilon_decay: 0.999
+target_model_update_freq: 200
+env_model_update_freq: 10
+moving_average_window: 100
+log_freq: 50
+show_freq: 10
+log_dir: "/home/jimmy/Desktop/CARLA_PROJ/Logs"
+save_freq: 500
+save_dir: "/home/jimmy/Desktop/CARLA_PROJ/Checkpoints"
