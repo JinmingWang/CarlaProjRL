@@ -1,0 +1,5 @@
+./Checkpoints/*
+./Logs/*
+./SubmitCode
+./Deprecate
+./SegTrainer/checkpoints/*
