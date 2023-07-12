@@ -8,7 +8,7 @@ $ git clone https://github.com/JinmingWang/CarlaProjRL && cd CarlaProjRL
 $ git submodule init
 $ git submodule update
 
-$ conda create -n carla-rl-pytorch python=3.8 torchvision pytorch pytorch-cuda=11.6 -c pytorch -c nvidia
+$ conda create -n carla-rl-pytorch python=3.8 torchvision pytorch==1.13 cudatoolkit==11.6 cudnn -c pytorch -c nvidia
 $ conda activate carla-rl-pytorch
 $ pip install carla==0.9.14 pyyaml pynvml tensorboard
 $ cd leaderboard && pip install -r requirements.txt && cd ..
