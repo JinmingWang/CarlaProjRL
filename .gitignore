@@ -3,3 +3,6 @@
 ./SubmitCode
 ./Deprecate
 ./SegTrainer/checkpoints/*
+./__pycache__
+./.idea
+./Experiments
