@@ -36,7 +36,7 @@ class VehicleState:
         spacial_features = torch.cat([torch.tensor(self.next_point_xyz - self.gnss_xyz), torch.tensor(self.imu_arr)])
 
         # spacial_features[[0, 1, 3, 4, 5, 9]] /= 10   # dx, dy, accele_x, accele_y, accele_z are decayed for stability
-        spacial_features = spacial_features / 10
+        # spacial_features = spacial_features / 10
 
         point_cloud /= 10
 

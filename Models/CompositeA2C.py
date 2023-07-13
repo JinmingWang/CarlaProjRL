@@ -124,8 +124,26 @@ class CompositeA2C(nn.Module):
         return params
 
 
+    def getSteer(self, spacial_features):
+        # Step 1. Compute steer to let the vehicle directly point to the next point in the path
+        absolute_dx = spacial_features[:, 0]  # dx
+        absolute_dy = spacial_features[:, 1]  # dy
+        theta = - spacial_features[:, 9]  # compass
+        cos = torch.cos(theta)
+        sin = torch.sin(theta)
+
+        relative_dx = cos * absolute_dx - sin * absolute_dy
+        relative_dy = sin * absolute_dx + cos * absolute_dy
+
+        steer_rad = torch.atan2(relative_dx, - relative_dy)
+        steer_angle = steer_rad * 180 / torch.pi
+        greedy_steer = func.hardtanh(steer_angle / 70, -1, 1)
+        return greedy_steer
+
 
     def forward(self, rgb_cam, radar_data, spacial_features):
+        steer = self.getSteer(spacial_features)
+
         bgr_enc = self.bgr_postprocess(self.bgr_encoder(rgb_cam))     # (B, 128, 18, 25)
         points_enc = self.points_encoder(radar_data)     # (B, 32, 18, 25)
 
@@ -142,10 +160,10 @@ class CompositeA2C(nn.Module):
         throttle_brake_std = torch.sigmoid(output[:, 1])
 
         # steer must have mu in range [-1, 1] and std in range [0, 1]
-        steer_mu = torch.tanh(output[:, 2])
+        steer_offset = torch.tanh(output[:, 2])
         steer_std = torch.sigmoid(output[:, 3])
 
-        return V_s, throttle_brake_mu, throttle_brake_std, steer_mu, steer_std
+        return V_s, throttle_brake_mu, throttle_brake_std, steer + steer_offset, steer_std
 
 
 def statModel():

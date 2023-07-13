@@ -1,10 +1,13 @@
 # Training configuration
 model_config: "/home/jimmy/Desktop/CARLA_PROJ/Models/config_model.yaml"
 data_folders:
-  - "/media/jimmy/MyData/Data/carla/20230712-053225"
-  - "/media/jimmy/MyData/Data/carla/20230712-080704"
+  - "/media/jimmy/MyData/Data/carla/town01_1"
+  - "/media/jimmy/MyData/Data/carla/town02_1"
+  - "/media/jimmy/MyData/Data/carla/town03_1"
+  - "/media/jimmy/MyData/Data/carla/town04_1"
+  - "/media/jimmy/MyData/Data/carla/town05_1"
 batch_size: 32
-learning_rate: 0.001
+learning_rate: 0.0001
 gamma: 0.98
 memory_size: 500
 cache_size: 10

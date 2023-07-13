@@ -4,6 +4,7 @@ import torch
 import random
 import time
 from typing import *
+import math
 
 from PathConfigs import *
 
@@ -22,7 +23,7 @@ from Agents.HumanAgent import HumanAgent
 # Reference blog.wuhanstudio.uk
 
 class VehicleEnv:
-    POINT_DIST = 5.0
+    POINT_DIST = 20.0
     STEP_TICKS = 1
     MAX_N_STEPS = 5000
     front_camera = None
@@ -83,13 +84,14 @@ class VehicleEnv:
         self.setupRouteVehicle()
 
         sensor_transform = carla.Transform(carla.Location(x=2.5, z=0.7))
+        gps_transform = carla.Transform(carla.Location(x=0.0, y=0.0, z=0.0))
         lidar_transform = carla.Transform(carla.Location(x=0.0, z=2.5))
 
         self.setupCamera(sensor_transform)
         self.setupLidar(lidar_transform)
-        self.setupGnss(sensor_transform)
+        self.setupGnss(gps_transform)
         self.setupCollision(sensor_transform)
-        self.setupIMU(sensor_transform)
+        self.setupIMU(gps_transform)
 
         self.ego_vehicle.apply_control(carla.VehicleControl(throttle=0.0, brake=0.0))
         self.car_prev_dist = 0.0
@@ -363,6 +365,34 @@ class VehicleEnv:
 
             cv2.imshow("Display", temp)
 
+        if self.configs["show_local_map"]:
+            local_map = np.zeros((31, 31, 3), dtype=np.uint8)
+            local_map[15, 15] = 255
+            next_point = self.getNextTargetPoint()
+            relative_target_x = next_point[0] - self.gnss_xyz[0]
+            relative_target_y = next_point[1] - self.gnss_xyz[1]
+
+            theta = - self.imu_numpy[-1]  # compass in radians, North = 0.0 = 2pi
+            cos = math.cos(theta)
+            sin = math.sin(theta)
+
+            target_col = cos * relative_target_x - sin * relative_target_y
+            target_row = sin * relative_target_x + cos * relative_target_y
+            target_col = np.clip(target_col + 15, 0, 30)
+            target_row = np.clip(target_row + 15, 0, 30)
+
+            # steer_needed = math.atan2(target_col - 15, 15 - target_row)
+            # steer_angle_needed = steer_needed * 180 / math.pi
+            # steer_control = np.clip(steer_angle_needed, -70, 70) / 70
+            # print(steer_control)
+
+            local_map[int(target_row), int(target_col), 0] = 255
+            temp = cv2.resize(local_map, dsize=(255, 255), interpolation=cv2.INTER_NEAREST)
+            cv2.line(temp, (127, 127), (127, 0), (255, 255, 255), 1)
+            cv2.line(temp, (127, 127), (int(target_col * 255 / 31), int(target_row * 255 / 31)), (255, 0, 0), 1)
+
+            cv2.imshow("local map", temp)
+
 
     def getNextTargetPoint(self) -> np.ndarray:
         """
@@ -422,6 +452,7 @@ class VehicleEnv:
         :param action: the action to take
         :return: a tuple of (state, reward, done, user_input), user_input is cv2.waitKey() result, None if not display
         """
+
         self.step_count += 1
 
         k = None
@@ -439,7 +470,7 @@ class VehicleEnv:
             location.z = 15
             rotation = ego_trans.rotation
             rotation.pitch = -60
-            # rotation.yaw = 60
+            # rotation.yaw = -90   # face to north
             rotation.roll = 0
 
             # The spectator should behind the vehicle, no matter what orientation the vehicle is facing

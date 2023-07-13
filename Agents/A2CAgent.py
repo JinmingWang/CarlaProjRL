@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.optim as optim
 import yaml
 from Models.CompositeA2C import CompositeA2C
-from Models.GreedyA2C import GreedyA2C
+from Models.GreedyModel import GreedyModel
 from Agents.HumanAgent import HumanAgent
 
 """
@@ -82,7 +82,7 @@ class A2CAgent(AgentBasic):
 
         advantage = (td_target - V_s).detach()  # (B)
         advantage = torch.nn.functional.relu(advantage)
-        pi_s_a = throttle_brake_distribution.log_prob(batch_A[:, 0]) + steer_distribution.log_prob(batch_A[:, 1])  # (B)
+        pi_s_a = torch.clip(throttle_brake_distribution.log_prob(batch_A[:, 0]) + steer_distribution.log_prob(batch_A[:, 1]), -10, 10)  # (B)
         policy_loss = (-pi_s_a * advantage).mean()
 
         # entropy = throttle_brake_distribution.entropy() + steer_distribution.entropy()
