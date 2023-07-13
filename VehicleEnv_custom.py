@@ -24,7 +24,7 @@ from Agents.HumanAgent import HumanAgent
 class VehicleEnv:
     POINT_DIST = 5.0
     STEP_TICKS = 1
-    MAX_N_STEPS = 10000
+    MAX_N_STEPS = 5000
     front_camera = None
     lidar_numpy = None
 
@@ -83,7 +83,7 @@ class VehicleEnv:
         self.setupRouteVehicle()
 
         sensor_transform = carla.Transform(carla.Location(x=2.5, z=0.7))
-        lidar_transform = carla.Transform(carla.Location(x=0.0, z=2.0))
+        lidar_transform = carla.Transform(carla.Location(x=0.0, z=2.5))
 
         self.setupCamera(sensor_transform)
         self.setupLidar(lidar_transform)
@@ -96,7 +96,7 @@ class VehicleEnv:
 
         self.episode_begin_time = time.time()
 
-        while self.front_camera is None or self.lidar_numpy is None or self.gnss_xyz is None:
+        while self.front_camera is None or self.lidar_numpy is None or self.gnss_xyz is None or self.imu_numpy is None:
             self.world.tick()
         self.world.tick()
 
@@ -400,20 +400,17 @@ class VehicleEnv:
         """
         reward = 0
 
-        if len(self.route) == 0:
-            reward += 10
-
         # positive if further
         # negative if closer
         reward += (self.car_prev_dist - distance_to_next_point) / self.POINT_DIST
 
         # +1 if reached
         if reached:
-            reward += 1
+            reward += self.configs["point_reach_reward"]
 
         # -3 if collision
         if self.collide_detected:
-            reward -= 4
+            reward -= self.configs["collide_penalty"]
             self.collide_detected = False
 
         return reward

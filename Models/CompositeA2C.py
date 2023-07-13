@@ -59,15 +59,23 @@ class CompositeA2C(nn.Module):
             nn.Linear(256, 128), nn.ReLU(inplace=True),     # (B, 128)
         )
 
+
+        self.features_encoder = nn.Sequential(
+            nn.Linear(10, 128), nn.ReLU(inplace=True),
+            nn.Linear(128, 128), nn.ReLU(inplace=True),
+            nn.Linear(128, 128), nn.ReLU(inplace=True),
+        )
+
         self.value_head = nn.Sequential(
-            nn.Linear(128 + 10, 128), nn.ReLU(inplace=True),
+            nn.Linear(128 + 128, 128), nn.ReLU(inplace=True),
             nn.Linear(128, 64), nn.ReLU(inplace=True),
             nn.Linear(64, 32), nn.ReLU(inplace=True),
             nn.Linear(32, 1),
+            nn.Flatten(0)
         )
 
         self.policy_head = nn.Sequential(
-            nn.Linear(128 + 10, 128), nn.ReLU(inplace=True),
+            nn.Linear(128 + 128, 128), nn.ReLU(inplace=True),
             nn.Linear(128, 64), nn.ReLU(inplace=True),
             nn.Linear(64, 32), nn.ReLU(inplace=True),
             nn.Linear(32, 4),
@@ -93,6 +101,10 @@ class CompositeA2C(nn.Module):
 
 
     def getUnfreezeParams(self):
+        if True not in [self.configs["freeze_bgr_model"], self.configs["freeze_point_cloud_model"], 
+                        self.configs["freeze_connection"], self.configs["freeze_head"]]:
+            return self.parameters()
+
         params = []
         if not self.configs["freeze_bgr_model"]:
             params.append({"params": self.bgr_encoder.parameters()})
@@ -101,6 +113,7 @@ class CompositeA2C(nn.Module):
             params.append({"params": self.points_encoder.parameters()})
 
         if not self.configs["freeze_connection"]:
+            params.append({"params": self.features_encoder.parameters()})
             params.append({"params": self.bgr_postprocess.parameters()})
             params.append({"params": self.img_radar_cat_block.parameters()})
 
@@ -117,6 +130,8 @@ class CompositeA2C(nn.Module):
         points_enc = self.points_encoder(radar_data)     # (B, 32, 18, 25)
 
         img_points_enc = self.img_radar_cat_block(torch.cat([bgr_enc, points_enc], dim=1))     # (B, 128)
+
+        spacial_features = self.features_encoder(spacial_features)
 
         output = self.policy_head(torch.cat([img_points_enc, spacial_features], dim=1))     # (B, 5)
 

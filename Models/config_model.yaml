@@ -1,7 +1,7 @@
 composite_model: CompositeA2C
 
 BGR_model_path: "/home/jimmy/Desktop/CARLA_PROJ/SegTrainer/checkpoints/seg_9.pth"
-model_path: null # "/home/jimmy/Desktop/CARLA_PROJ/Checkpoints/20230712-064414/model_epoch6.pth"
+model_path: "/home/jimmy/Desktop/CARLA_PROJ/Checkpoints/20230713-083003/model_it3000.pth"
 
 freeze_bgr_model: False
 freeze_point_cloud_model: False

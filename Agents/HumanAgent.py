@@ -27,8 +27,8 @@ class HumanAgent:
         cv2.line(control_board, (0, middle_y), (self.width, middle_y), (255, 0, 0), 1)
 
         # Draw throttle - brake split line
-        cv2.line(control_board, (0, int(self.height * 0.25)), (self.width, int(self.height * 0.25)), (0, 255, 0), 1)
-        cv2.line(control_board, (0, int(self.height * 0.75)), (self.width, int(self.height * 0.75)), (0, 255, 0), 1)
+        cv2.line(control_board, (0, int(self.height * 0.375)), (self.width, int(self.height * 0.375)), (0, 255, 0), 1)
+        cv2.line(control_board, (0, int(self.height * 0.625)), (self.width, int(self.height * 0.625)), (0, 255, 0), 1)
 
         # draw forward text
         text_font = cv2.FONT_HERSHEY_SIMPLEX

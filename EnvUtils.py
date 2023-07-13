@@ -31,10 +31,17 @@ class VehicleState:
         :return: (bgr_frame: 1x3xHxW, radar_points: 1xNx4, spacial_features: 1x10)
         spacial_features: dx, dy, dz, accelerometer x, y, z, gyroscope x, y, z, compass
         """
-        return torch.tensor(self.bgr_camera, dtype=torch.float32, device=self.device).permute(2, 0, 1).unsqueeze(0) / 255, \
-            torch.tensor(self.point_cloud, dtype=torch.float32, device=self.device).unsqueeze(0), \
-            torch.cat([torch.tensor(self.next_point_xyz - self.gnss_xyz, dtype=torch.float32, device=self.device).unsqueeze(0),
-                          torch.tensor(self.imu_arr, dtype=torch.float32, device=self.device).unsqueeze(0)], dim=1)
+        bgr_frame = torch.tensor(self.bgr_camera, dtype=torch.float32, device=self.device).permute(2, 0, 1).unsqueeze(0) / 255
+        point_cloud = torch.tensor(self.point_cloud, dtype=torch.float32, device=self.device).unsqueeze(0)
+        spacial_features = torch.cat([torch.tensor(self.next_point_xyz - self.gnss_xyz), torch.tensor(self.imu_arr)])
+
+        # spacial_features[[0, 1, 3, 4, 5, 9]] /= 10   # dx, dy, accele_x, accele_y, accele_z are decayed for stability
+        spacial_features = spacial_features / 10
+
+        point_cloud /= 10
+
+        return bgr_frame, point_cloud, spacial_features.unsqueeze(0).to(dtype=torch.float32, device=self.device)
+
 
     @classmethod
     def makeBatch(cls, states: List["VehicleState"]) -> Tuple[torch.Tensor, List[torch.Tensor], torch.Tensor]:
@@ -61,11 +68,11 @@ class VehicleState:
 class VehicleAction:
     """
     steer: [-1, 1]
-    throttle_brake: [-2, 2] = [-2, -1] U [-1, 0] U [0, 1] U [1, 2]
-    [-2, -1]: backward throttle
-    [-1, 0]: brake
-    [0, 1]: brake
-    [1, 2]: forward throttle
+    throttle_brake: [-2, 2] = [-2, -0.5] U [-0.5, 0] U [0, 0.5] U [0.5, 2]
+    [-2, -0.5]: backward throttle
+    [-0.5, 0]: brake
+    [0, 0.5]: brake
+    [0.5, 2]: forward throttle
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     def __init__(self, throttle_brake: Union[float, torch.Tensor], steer: Union[float, torch.Tensor]):
@@ -94,12 +101,12 @@ class VehicleAction:
             reverse = True
             throttle_brake = -self.throttle_brake
 
-        if throttle_brake >= 1:
-            throttle = throttle_brake - 1
+        if throttle_brake >= 0.5:
+            throttle = (throttle_brake - 0.5) / 1.5
             brake = 0
         else:
             throttle = 0
-            brake = 1 - throttle_brake
+            brake = (0.5 - throttle_brake) * 2
 
         vehicle.apply_control(carla.VehicleControl(throttle=throttle, brake=brake, steer=self.steer, reverse=reverse))
 

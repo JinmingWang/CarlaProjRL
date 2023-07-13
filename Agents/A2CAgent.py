@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.optim as optim
 import yaml
 from Models.CompositeA2C import CompositeA2C
+from Models.GreedyA2C import GreedyA2C
 from Agents.HumanAgent import HumanAgent
 
 """
@@ -49,12 +50,17 @@ class A2CAgent(AgentBasic):
     def trainStep(self, batch_tensors):
 
         self.optimizer.zero_grad()
-        batch_S_bgr, batch_S_radar, batch_S_dxdydz, \
+        batch_S_bgr, batch_S_radar, batch_S_features, \
             batch_A, batch_R, \
-            batch_nS_bgr, batch_nS_radar, batch_nS_dxdydz, \
+            batch_nS_bgr, batch_nS_radar, batch_nS_features, \
             batch_T = batch_tensors
 
         # batch_A: (B, 2)
+        # batch_S_features: (B, 10)
+
+        # Check if NaN is in batch_S_features
+        if torch.any(torch.isnan(batch_S_features)):
+            print(batch_S_features)
 
         # TD target = r + gamma * V(s') with target network
         # TD prediction = V(s) with main network
@@ -64,34 +70,31 @@ class A2CAgent(AgentBasic):
 
         with torch.no_grad():
             # V_sp: (B)
-            V_sp, _, _, _, _ = self.target_model(batch_nS_bgr, batch_nS_radar, batch_nS_dxdydz)
+            V_sp, _, _, _, _ = self.target_model(batch_nS_bgr, batch_nS_radar, batch_nS_features)
             td_target = batch_R + self.gamma * V_sp * ~batch_T  # (B)
 
         # V_s: (B), throttle_brake_mu_std: (B, 2), steer_mu_std: (B, 2)
-        V_s, throttle_brake_mu, throttle_brake_std, steer_mu, steer_std = self.model(batch_S_bgr, batch_S_radar, batch_S_dxdydz)
+        V_s, throttle_brake_mu, throttle_brake_std, steer_mu, steer_std = self.model(batch_S_bgr, batch_S_radar, batch_S_features)
         throttle_brake_std = torch.clip(throttle_brake_std, 0.0001, 1)
         steer_std = torch.clip(steer_std, 0.0001, 1)
         throttle_brake_distribution = torch.distributions.Normal(throttle_brake_mu, throttle_brake_std)
         steer_distribution = torch.distributions.Normal(steer_mu, steer_std)
 
         advantage = (td_target - V_s).detach()  # (B)
-        # advantage = torch.clip(advantage, 0, 2)
+        advantage = torch.nn.functional.relu(advantage)
         pi_s_a = throttle_brake_distribution.log_prob(batch_A[:, 0]) + steer_distribution.log_prob(batch_A[:, 1])  # (B)
-        policy_loss = -torch.clip(pi_s_a * advantage, -2, 2)  # (B)
+        policy_loss = (-pi_s_a * advantage).mean()
 
         # entropy = throttle_brake_distribution.entropy() + steer_distribution.entropy()
 
         value_loss = self.loss_func(V_s, td_target)  # (B)
 
-        loss = 0.1 * policy_loss.mean() + value_loss# - 0.01 * entropy.mean()
+        loss = 0.01 * policy_loss + value_loss# - 0.01 * entropy.mean()
 
         if torch.any(torch.isnan(loss)):
             print(f"NAN LOSS, backward and optim disabled, td_err={value_loss.mean().item():.5f}, policy_loss={policy_loss.mean().item():.5f}")
         else:
             loss.backward()
-            # gradient clip
-            for param in self.model.parameters():
-                param.grad.data.clamp_(-1, 1)
             self.optimizer.step()
 
         if self.it % 100 == 0:
