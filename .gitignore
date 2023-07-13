@@ -1,8 +1,6 @@
-./Checkpoints/*
-./Logs/*
 ./SubmitCode
 ./Deprecate
 ./SegTrainer/checkpoints/*
-./__pycache__
 ./.idea
 ./Experiments
+__pycache__

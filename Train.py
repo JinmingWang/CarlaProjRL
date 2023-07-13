@@ -2,7 +2,6 @@ import multiprocessing
 import os
 import time
 from Agents.AgentBasic import AgentBasic, ShadowAgentBasic
-from Agents.DQNAgent import DQNAgent, ShadowDQNAgent
 from Agents.A2CAgent import A2CAgent, ShadowA2CAgent
 # from VehicleEnv_official import VehicleEnv
 from VehicleEnv_custom import VehicleEnv
@@ -136,7 +135,7 @@ def trainLoop():
 
         if save_memory_signal.value != 0:
             logger.log("info", "Saving memory...")
-            save_dir = f"/media/jimmy/MyData/Data/carla/{program_start_time}/{save_memory_signal.value}"
+            save_dir = f"Data/{program_start_time}/{save_memory_signal.value}"
             os.makedirs(save_dir, exist_ok=True)
             memory.save(save_dir)
             save_memory_signal.value = 0
