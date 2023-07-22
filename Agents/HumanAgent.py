@@ -10,7 +10,7 @@ class HumanAgent:
         self.control_board = self.drawControlBoard()
 
         self.control_signal_received = False
-        self.action = VehicleAction.getIdleAction()
+        self.action = VehicleAction.getStopAction()
         self.showControlBoard()
 
 

@@ -22,7 +22,8 @@ class AgentBasic:
         self.target_model.to(self.device)
 
         self.loss_func = nn.SmoothL1Loss()
-        self.optimizer = optim.Adam(self.model.getUnfreezeParams(), lr=configs["learning_rate"])
+        self.optimizer_value = optim.Adam(self.model.getValueParams(), lr=configs["learning_rate"])
+        self.optimizer_policy = optim.Adam(self.model.getPolicyParams(), lr=configs["learning_rate"] * 0.1)
 
         self.gamma = configs["gamma"]
 
@@ -55,7 +56,7 @@ class AgentBasic:
 
         td_prediction = self.student_model()
 
-        loss = self.loss_func(td_prediction, td_target)
+        loss = self.base_loss_func(td_prediction, td_target)
         loss.backward()
         self.optimizer.step()
 
@@ -70,8 +71,6 @@ class ShadowAgentBasic:
         self.model.eval()
 
         self.epsilon = base_agent.configs["epsilon"]
-        self.epsilon_decay = base_agent.configs["epsilon_decay"]
-        self.epsilon_min = base_agent.configs["epsilon_min"]
 
         self.rand_throttle_brake = np.random.rand() * 4 - 2
         self.rand_steer = np.random.rand() * 2 - 1

@@ -129,7 +129,7 @@ class MemoryList(list):
         return batch_tensors
     
     def save(self, folder_path: str) -> None:
-        for i, memory in enumerate(self[::5]):
+        for i, memory in enumerate(self[::2]):
             memory_tuple = memory.toTuple()
             torch.save(memory_tuple, f"{folder_path}/{i:05d}.pt")
 

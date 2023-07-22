@@ -1,23 +1,19 @@
 # Training configuration
-model_config: "/home/jimmy/Desktop/CARLA_PROJ/Models/config_model.yaml"
+model_path: null
 data_folders:
-  - "/media/jimmy/MyData/Data/carla/town01_1"
-  - "/media/jimmy/MyData/Data/carla/town02_1"
-  - "/media/jimmy/MyData/Data/carla/town03_1"
-  - "/media/jimmy/MyData/Data/carla/town04_1"
-  - "/media/jimmy/MyData/Data/carla/town05_1"
-batch_size: 32
-learning_rate: 0.0001
+  - "/media/jimmy/MyData/Data/carla/20230716-090013"
+  - "/media/jimmy/MyData/Data/carla/20230716-095740"
+  - "/media/jimmy/MyData/Data/carla/20230718-060304"
+  - "/media/jimmy/MyData/Data/carla/20230718-072650"
+  - "/media/jimmy/MyData/Data/carla/20230718-074806"
+  - "/media/jimmy/MyData/Data/carla/20230718-080318"
+batch_size: 128
+learning_rate: 0.001
 gamma: 0.98
-memory_size: 500
-cache_size: 10
-epsilon: 0.5
-epsilon_min: 0.1
-epsilon_decay: 0.999
-target_model_update_freq: 200
-env_model_update_freq: 10
+target_model_update_freq: 1000
 moving_average_window: 100
-log_freq: 50
+log_freq: 100
+print_freq: 100
 show_freq: 10
 log_dir: "/home/jimmy/Desktop/CARLA_PROJ/Logs"
 save_freq: 500

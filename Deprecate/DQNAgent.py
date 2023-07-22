@@ -1,9 +1,8 @@
 from TrainUtils import *
 from Agents.AgentBasic import AgentBasic, ShadowAgentBasic
 import torch.nn as nn
-import torch.optim as optim
 import yaml
-from Models.CompositeDQN import CompositeDQN
+from Deprecate.CompositeDQN import CompositeDQN
 from Agents.HumanAgent import HumanAgent
 
 """

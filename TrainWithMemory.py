@@ -3,7 +3,6 @@
 import os
 from Agents.A2CAgent import A2CAgent
 import yaml
-import multiprocessing
 from TrainUtils import *
 from torch.utils.tensorboard import SummaryWriter
 
@@ -44,7 +43,8 @@ class MemoryDataset(Dataset):
 
 
 
-def collectFunc(batch: List[MemoryTuple]) -> Tuple:
+def collectFunc(batch: List[MemoryTuple]) -> torch.Tensor:
+    # only return batch of local maps
     return MemoryTuple.makeBatch(batch)
 
 
@@ -79,12 +79,6 @@ def train(configs, n_epochs: int = 40):
             critic_loss_records.add(critic_loss)
 
             pbar.set_postfix_str(f"loss: {loss_records.get():.4f}, actor_loss: {actor_loss_records.get():.4f}, critic_loss: {critic_loss_records.get():.4f}")
-
-            if it % configs["show_freq"] == 0:
-                policy_map = agent.policy_map
-                policy_map /= policy_map.max()
-                cv2.imshow("policy map", policy_map)
-                cv2.waitKey(1)
 
             if it % configs["log_freq"] == 0:
                 summary_writer.add_scalar("loss", loss_records.get(), it)

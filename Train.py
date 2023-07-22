@@ -42,31 +42,29 @@ def runEnvironment(configs, agent, avg_reward, shared_model, shared_model_update
 
     # Simulation loop
     while True:
-        state = VehicleState(env.front_camera, env.lidar_numpy, env.gnss_xyz, env.getNextTargetPoint(), env.imu_numpy)
+        state = VehicleState(env.lidar_map, env.gnss_xyz, env.getNextTargetPoint(), env.compass, env.smooth_speed)
         action = shadow_agent.getAction(state)
         is_done = False
         # Episode loop
         while not is_done:
-            record = MemoryTuple()
-            record.state = state
-            record.action = action
             next_state, reward, done, user_input = env.step(action)
-            record.next_state = next_state
-            record.reward = reward
-            record.done = done
-
             reward_records.add(reward)
             avg_reward.value = reward_records.get()
 
             # Keep adding memory tuples to cache queue
-            if n_iter % 3 == 0:
+            # but once every 4 iterations
+            if n_iter % 4 == 0:
+                record = MemoryTuple()
+                record.state = state
+                record.action = action
+                record.next_state = next_state
+                record.reward = reward
+                record.done = done
                 cache.put(record)
-
 
             n_iter += 1
             if n_iter % configs["memory_save_freq"] == 0:
                 save_memory_signal.value = n_iter // configs["memory_save_freq"]
-
 
             if user_input == ord("r"):
                 break
@@ -135,7 +133,7 @@ def trainLoop():
 
         if save_memory_signal.value != 0:
             logger.log("info", "Saving memory...")
-            save_dir = f"Data/{program_start_time}/{save_memory_signal.value}"
+            save_dir = f"/media/jimmy/MyData/Data/carla/{program_start_time}/{save_memory_signal.value}"
             os.makedirs(save_dir, exist_ok=True)
             memory.save(save_dir)
             save_memory_signal.value = 0
@@ -162,11 +160,6 @@ def trainLoop():
             copyModel(agent.model, shared_model.obj)
             shared_model_update.value = it
             agent.model.to(agent.device)
-
-
-        if it % configs["show_freq"] == 0:
-            cv2.imshow("policy map", agent.policy_map / agent.policy_map.max())
-            cv2.waitKey(1)
 
 
         if it % configs["log_freq"] == 0:

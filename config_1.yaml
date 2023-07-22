@@ -1,59 +1,48 @@
 # Client and world configuration
 host: localhost
 port: 2000
-world: Town05
+world: Town02
 traffic_manager_port: 8000
 traffic_manager_seed: 0
 timeout: 300.0
 vehicle_model: model3
 
-# Routes and Scenario configuration
-routes: "leaderboard/data/routes_devtest.xml"
-repetitions: 1
-
-# Camera sensor configuration
-cam_w: 800
-cam_h: 600
-cam_fov: "120"
-
-# Radar sensor configuration
-radar_h_fov: "120"
-radar_v_fov: "30"
-radar_pps: 2000   # points per second
-radar_range: 100
-
 # Lidar sensor configuration
-noise_stddev: "0.2"
-channels: "6"
-range: "20"
-rotation_frequency: "10"
-lidar_fov_lower: "-30"
-lidar_fov_upper: "-15"
-lidar_pps: "2000"  # points per second, 2000 = 8 channels * 25 points per channel * 10 Hz
-max_points_stored: 200
-max_points_each_time: 200
+noise_stddev: "0.1"
+channels: "8"
+range: "11"
+rotation_frequency: "20"
+lidar_fov_lower: "-31"
+lidar_fov_upper: "-5"
+lidar_pps: "16000"  # points per second, 12000 = 6 channels * 100 points per channel * 20 Hz
 
 
 # Reward config
-collide_penalty: -5
+collide_penalty: -1
 point_reach_reward: 1
+stop_penalty: -0.01
 
 
 # Training configuration
-model_config: "Models/config_model.yaml"
-batch_size: 8
+model_path: "Checkpoints/20230722-093241/model_it21000.pth"
+batch_size: 64
 learning_rate: 0.001
 gamma: 0.98
-memory_size: 1000
-memory_save_freq: 2000
-cache_size: 10
-epsilon: 0.8
-epsilon_min: 0.1
-epsilon_decay: 0.999
+memory_size: 8000
+memory_save_freq: 8000
+cache_size: 15
+# According to the design "every random action is applied 10 times in a row":
+# epsilon = 0.4, around 85% random actions
+# epsilon = 0.2, around 80% - 75% random actions
+# epsilon = 0.1, around half random actions
+# epsilon = 0.05, around 30% - 40% random actions
+# epsilon = 0.01, around 10% random actions
+epsilon: 0.04
 target_model_update_freq: 5000
-env_model_update_freq: 50
+env_model_update_freq: 100
 moving_average_window: 100
-show_freq: 100
+print_freq: 100
+show_freq: 50
 log_freq: 500
 log_dir: "Logs"
 save_freq: 1000
@@ -62,13 +51,12 @@ save_dir: "Checkpoints"
 
 # display
 display: True
-show_window: False
 show_waypoints: True
 show_lidar: False
-show_xyz: False
-show_local_map: False
+show_lidar_map: True
+
 
 # Other
-reach_threshold: 2.5
+reach_threshold: 2.0
 device: "cuda"
 n_other_actors: 60
