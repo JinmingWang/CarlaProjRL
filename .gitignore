@@ -1,6 +1,5 @@
 ./SubmitCode
 ./Deprecate
-./SegTrainer/checkpoints/*
 ./.idea
-./Experiments
+TempTests
 __pycache__

@@ -1,0 +1,54 @@
+<Train---------------> [20230722-075431] [INFO]: Waiting for environment to fill memory...
+<Train---------------> [20230722-075442] [INFO]: Training Start...
+<Train---------------> [20230722-075443] [INFO]: Iteration 0, loss: 0.14693619310855865, avg_reward: -0.026432400569319725, memory_size: 64, batch_size: 1
+<Train---------------> [20230722-075443] [INFO]: Model saved to Checkpoints/20230722-075426//model_it0.pth at iteration 0
+<Train---------------> [20230722-075527] [INFO]: Iteration 500, loss: -0.024007780477404594, avg_reward: 0.03152329847216606, memory_size: 594, batch_size: 64
+<Train---------------> [20230722-075620] [INFO]: Iteration 1000, loss: -0.04449276998639107, avg_reward: -0.061114925891160965, memory_size: 1217, batch_size: 64
+<Train---------------> [20230722-075621] [INFO]: Model saved to Checkpoints/20230722-075426//model_it1000.pth at iteration 1000
+<Train---------------> [20230722-075714] [INFO]: Iteration 1500, loss: -0.01889146864414215, avg_reward: -0.27949461340904236, memory_size: 1831, batch_size: 64
+<Train---------------> [20230722-075725] [INFO]: Saving memory...
+<Train---------------> [20230722-075810] [INFO]: Iteration 2000, loss: -0.021734558045864105, avg_reward: -1.4496840238571167, memory_size: 2498, batch_size: 64
+<Train---------------> [20230722-075810] [INFO]: Model saved to Checkpoints/20230722-075426//model_it2000.pth at iteration 2000
+<Train---------------> [20230722-075905] [INFO]: Iteration 2500, loss: -0.022928491234779358, avg_reward: -0.07850632816553116, memory_size: 3149, batch_size: 64
+<Train---------------> [20230722-080000] [INFO]: Iteration 3000, loss: -0.030126314610242844, avg_reward: -0.00018041521252598614, memory_size: 3805, batch_size: 64
+<Train---------------> [20230722-080000] [INFO]: Model saved to Checkpoints/20230722-075426//model_it3000.pth at iteration 3000
+<Train---------------> [20230722-080016] [INFO]: Saving memory...
+<Train---------------> [20230722-080100] [INFO]: Iteration 3500, loss: -0.02327447384595871, avg_reward: -0.259970486164093, memory_size: 4480, batch_size: 64
+<Train---------------> [20230722-080159] [INFO]: Iteration 4000, loss: -0.022952454164624214, avg_reward: -0.07868370413780212, memory_size: 5164, batch_size: 64
+<Train---------------> [20230722-080159] [INFO]: Model saved to Checkpoints/20230722-075426//model_it4000.pth at iteration 4000
+<Train---------------> [20230722-080300] [INFO]: Iteration 4500, loss: -0.0369793064892292, avg_reward: -0.0005625112098641694, memory_size: 5848, batch_size: 64
+<Train---------------> [20230722-080312] [INFO]: Saving memory...
+<Train---------------> [20230722-080356] [INFO]: Iteration 5000, loss: -0.03721245378255844, avg_reward: -0.9417483806610107, memory_size: 6510, batch_size: 64
+<Train---------------> [20230722-080356] [INFO]: Model saved to Checkpoints/20230722-075426//model_it5000.pth at iteration 5000
+<Train---------------> [20230722-080449] [INFO]: Iteration 5500, loss: -0.03817830979824066, avg_reward: -0.560080885887146, memory_size: 7131, batch_size: 64
+<Train---------------> [20230722-080544] [INFO]: Iteration 6000, loss: -0.05288691446185112, avg_reward: -0.0015355531359091401, memory_size: 7768, batch_size: 64
+<Train---------------> [20230722-080544] [INFO]: Model saved to Checkpoints/20230722-075426//model_it6000.pth at iteration 6000
+<Train---------------> [20230722-080605] [INFO]: Saving memory...
+<Train---------------> [20230722-080643] [INFO]: Iteration 6500, loss: -0.06351080536842346, avg_reward: -0.12912006676197052, memory_size: 8000, batch_size: 64
+<Train---------------> [20230722-080739] [INFO]: Iteration 7000, loss: -0.03870994225144386, avg_reward: -0.0006751476903446019, memory_size: 8000, batch_size: 64
+<Train---------------> [20230722-080739] [INFO]: Model saved to Checkpoints/20230722-075426//model_it7000.pth at iteration 7000
+<Train---------------> [20230722-080829] [INFO]: Saving memory...
+<Train---------------> [20230722-080838] [INFO]: Iteration 7500, loss: -0.04969603568315506, avg_reward: -0.00032935122726485133, memory_size: 8000, batch_size: 64
+<Train---------------> [20230722-080932] [INFO]: Iteration 8000, loss: -0.031011776998639107, avg_reward: -0.9589073657989502, memory_size: 8000, batch_size: 64
+<Train---------------> [20230722-080932] [INFO]: Model saved to Checkpoints/20230722-075426//model_it8000.pth at iteration 8000
+<Train---------------> [20230722-081028] [INFO]: Iteration 8500, loss: -0.052146829664707184, avg_reward: 0.060077305883169174, memory_size: 8000, batch_size: 64
+<Train---------------> [20230722-081114] [INFO]: Saving memory...
+<Train---------------> [20230722-081125] [INFO]: Iteration 9000, loss: -0.03954922780394554, avg_reward: -1.180709958076477, memory_size: 8000, batch_size: 64
+<Train---------------> [20230722-081125] [INFO]: Model saved to Checkpoints/20230722-075426//model_it9000.pth at iteration 9000
+<Train---------------> [20230722-081220] [INFO]: Iteration 9500, loss: -0.03201637044548988, avg_reward: -0.010384396649897099, memory_size: 8000, batch_size: 64
+<Train---------------> [20230722-081316] [INFO]: Iteration 10000, loss: -0.012764778919517994, avg_reward: -0.030107533559203148, memory_size: 8000, batch_size: 64
+<Train---------------> [20230722-081316] [INFO]: Model saved to Checkpoints/20230722-075426//model_it10000.pth at iteration 10000
+<Train---------------> [20230722-081412] [INFO]: Saving memory...
+<Train---------------> [20230722-081414] [INFO]: Iteration 10500, loss: -0.02863985486328602, avg_reward: 0.0004172020417172462, memory_size: 8000, batch_size: 64
+<Train---------------> [20230722-081507] [INFO]: Iteration 11000, loss: -0.023836486041545868, avg_reward: -0.22046244144439697, memory_size: 8000, batch_size: 64
+<Train---------------> [20230722-081507] [INFO]: Model saved to Checkpoints/20230722-075426//model_it11000.pth at iteration 11000
+<Train---------------> [20230722-081601] [INFO]: Iteration 11500, loss: -0.007369556929916143, avg_reward: 0.019276747480034828, memory_size: 8000, batch_size: 64
+<Train---------------> [20230722-081656] [INFO]: Iteration 12000, loss: -0.011366781778633595, avg_reward: -0.11996954679489136, memory_size: 8000, batch_size: 64
+<Train---------------> [20230722-081656] [INFO]: Model saved to Checkpoints/20230722-075426//model_it12000.pth at iteration 12000
+<Train---------------> [20230722-081704] [INFO]: Saving memory...
+<Train---------------> [20230722-081752] [INFO]: Iteration 12500, loss: -0.00859080534428358, avg_reward: -0.0006038817227818072, memory_size: 8000, batch_size: 64
+<Train---------------> [20230722-081849] [INFO]: Iteration 13000, loss: -0.023771019652485847, avg_reward: -0.6414819359779358, memory_size: 8000, batch_size: 64
+<Train---------------> [20230722-081849] [INFO]: Model saved to Checkpoints/20230722-075426//model_it13000.pth at iteration 13000
+<Train---------------> [20230722-081946] [INFO]: Iteration 13500, loss: -0.011410214938223362, avg_reward: 0.023084072396159172, memory_size: 8000, batch_size: 64
+<Train---------------> [20230722-081956] [INFO]: Saving memory...
+<Train---------------> [20230722-082003] [INFO]: Training End...

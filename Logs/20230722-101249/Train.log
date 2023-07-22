@@ -1,0 +1,20 @@
+<Train---------------> [20230722-101254] [INFO]: Waiting for environment to fill memory...
+<Train---------------> [20230722-101303] [INFO]: Training Start...
+<Train---------------> [20230722-101305] [INFO]: Iteration 0, loss: 1.35146963596344, avg_reward: -0.0994936004281044, memory_size: 64, batch_size: 1
+<Train---------------> [20230722-101305] [INFO]: Model saved to Checkpoints/20230722-101249//model_it0.pth at iteration 0
+<Train---------------> [20230722-101345] [INFO]: Iteration 500, loss: -0.030657855793833733, avg_reward: -0.02279641665518284, memory_size: 538, batch_size: 64
+<Train---------------> [20230722-101436] [INFO]: Iteration 1000, loss: -0.010317917913198471, avg_reward: -0.1451486349105835, memory_size: 1098, batch_size: 64
+<Train---------------> [20230722-101436] [INFO]: Model saved to Checkpoints/20230722-101249//model_it1000.pth at iteration 1000
+<Train---------------> [20230722-101528] [INFO]: Iteration 1500, loss: -0.015080856159329414, avg_reward: 0.08221299946308136, memory_size: 1651, batch_size: 64
+<Train---------------> [20230722-101600] [INFO]: Saving memory...
+<Train---------------> [20230722-101621] [INFO]: Iteration 2000, loss: -0.027454733848571777, avg_reward: -0.06164727360010147, memory_size: 2229, batch_size: 64
+<Train---------------> [20230722-101621] [INFO]: Model saved to Checkpoints/20230722-101249//model_it2000.pth at iteration 2000
+<Train---------------> [20230722-101712] [INFO]: Iteration 2500, loss: -0.03949132561683655, avg_reward: 0.042860180139541626, memory_size: 2774, batch_size: 64
+<Train---------------> [20230722-101808] [INFO]: Iteration 3000, loss: -0.006454746704548597, avg_reward: 0.007571835536509752, memory_size: 3364, batch_size: 64
+<Train---------------> [20230722-101808] [INFO]: Model saved to Checkpoints/20230722-101249//model_it3000.pth at iteration 3000
+<Train---------------> [20230722-101859] [INFO]: Iteration 3500, loss: -0.032135505229234695, avg_reward: -1.2812353372573853, memory_size: 3911, batch_size: 64
+<Train---------------> [20230722-101908] [INFO]: Saving memory...
+<Train---------------> [20230722-101953] [INFO]: Iteration 4000, loss: -0.04631408303976059, avg_reward: -0.020496683195233345, memory_size: 4465, batch_size: 64
+<Train---------------> [20230722-101953] [INFO]: Model saved to Checkpoints/20230722-101249//model_it4000.pth at iteration 4000
+<Train---------------> [20230722-102045] [INFO]: Iteration 4500, loss: -0.017109662294387817, avg_reward: 0.018491748720407486, memory_size: 5023, batch_size: 64
+<Train---------------> [20230722-102057] [INFO]: Training End...
