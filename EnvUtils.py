@@ -79,13 +79,14 @@ class VehicleAction:
     [0.5, 2]:       Positively increasing speed     speed *= s for s > 1
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    def __init__(self, speed: Union[float, torch.Tensor], steer: Union[float, torch.Tensor]):
+    def __init__(self, speed: Union[float, torch.Tensor], steer: Union[float, torch.Tensor], is_human_action: bool=False):
         if isinstance(speed, torch.Tensor):
             speed = speed.flatten(0).item()
         if isinstance(steer, torch.Tensor):
             steer = steer.flatten(0).item()
         self.speed = speed
         self.steer = steer
+        self.is_human_action = is_human_action
 
     def getTensor(self) -> torch.Tensor:
         return torch.tensor([self.speed, self.steer], dtype=torch.float, device=self.device).unsqueeze(0)

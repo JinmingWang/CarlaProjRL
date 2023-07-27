@@ -1,3 +1,5 @@
+# This config defines a very sparse lidar sensor
+
 # Client and world configuration
 host: localhost
 port: 2000
@@ -8,6 +10,7 @@ timeout: 300.0
 vehicle_model: model3
 
 # Lidar sensor configuration
+lidar_height: 2.5
 noise_stddev: "0.1"
 channels: "8"
 range: "11"
@@ -20,24 +23,19 @@ lidar_pps: "16000"  # points per second, 12000 = 6 channels * 100 points per cha
 # Reward config
 collide_penalty: -1
 point_reach_reward: 1
-stop_penalty: -0.01
 
 
 # Training configuration
-model_path: "Checkpoints/20230722-093241/model_it21000.pth"
+route_path: null
+model_path: "Checkpoints/20230723-152144/model_it6000.pth"
 batch_size: 64
 learning_rate: 0.001
 gamma: 0.98
 memory_size: 8000
 memory_save_freq: 8000
 cache_size: 15
-# According to the design "every random action is applied 10 times in a row":
-# epsilon = 0.4, around 85% random actions
-# epsilon = 0.2, around 80% - 75% random actions
-# epsilon = 0.1, around half random actions
-# epsilon = 0.05, around 30% - 40% random actions
-# epsilon = 0.01, around 10% random actions
-epsilon: 0.04
+epsilon: 0.02
+n_consecutive: 20
 target_model_update_freq: 5000
 env_model_update_freq: 100
 moving_average_window: 100
@@ -59,4 +57,4 @@ show_lidar_map: True
 # Other
 reach_threshold: 2.0
 device: "cuda"
-n_other_actors: 60
+n_other_actors: 40

@@ -1,10 +1,10 @@
 import multiprocessing
 import os
 import time
-from Agents.AgentBasic import AgentBasic, ShadowAgentBasic
-from Agents.A2CAgent import A2CAgent, ShadowA2CAgent
+from Agents.AgentBasic import AgentBasic, OnlyInferAgentBasic
+from Agents.A2CAgent import A2CAgent, OnlyInferA2CAgent
 # from VehicleEnv_official import VehicleEnv
-from VehicleEnv_custom import VehicleEnv
+from VehicleEnv import VehicleEnv
 import yaml
 import multiprocessing
 from TrainUtils import *
@@ -34,9 +34,12 @@ def runEnvironment(configs, agent, avg_reward, shared_model, shared_model_update
 
     reward_records = MovingAverage(configs["moving_average_window"])
 
-    shadow_agent = ShadowA2CAgent(agent)
+    shadow_agent = OnlyInferA2CAgent(agent)
 
     logger.log("info", "Environment Initialized, Simulation Start...")
+
+    for k, v in configs.items():
+        logger.log("info", f"{k}={v}")
 
     n_iter = 0
 
@@ -150,8 +153,11 @@ def trainLoop():
             dynamic_batch_size += 1
         batch_tensors = memory.sampleBatch(dynamic_batch_size)
 
-        loss, critic_loss, actor_loss = agent.trainStep(batch_tensors)
+        loss, message = agent.trainStep(batch_tensors)
         loss_records.add(loss)
+
+        if message != "":
+            logger.log("info", message)
 
         # copy agent model to shared model as CPU model
         # and set flag to 1 to notify environment process
@@ -180,7 +186,7 @@ def prepare() -> Dict:
     except RuntimeError:
         print("RuntimeError: set_start_method('spawn') failed, maybe you have already set it.")
 
-    with open("config_1.yaml", 'r') as in_file:
+    with open("config_dense_lidar.yaml", 'r') as in_file:
         configs = yaml.load(in_file, Loader=yaml.FullLoader)
     return configs
 

@@ -2,23 +2,17 @@ import torch
 
 from Models.ModelUtils import *
 
-
-"""
-This agent just greedy follow the next point in the path.
-Does not care about collision (Assumes no obstacle)
-"""
-
-
 class OutputHead(nn.Module):
     def __init__(self, out_size: int):
-        # input size: (B, 512, 4, 4)
+        # input size: (B, 1024, 4, 4)
         super().__init__()
 
         self.convs = nn.Sequential(
-            ConvNormAct(512, 256, 3, 2, 1),  # (256, 2, 2)
-            ConvNormAct(256, 128, 1, 1, 0),  # (128, 2, 2)
-            nn.MaxPool2d(2),  # (128, 1, 1)
-            nn.Flatten(1),  # (B, 128)
+            ConvNormAct(1024, 512, 3, 2, 1),  # (512, 2, 2)
+            ConvNormAct(512, 256, 1, 1, 0),  # (256, 2, 2)
+            nn.MaxPool2d(2),  # (256, 1, 1)
+            nn.Flatten(1),  # (B, 256)
+            nn.Linear(256, 128),
         )
 
         self.fc = nn.Sequential(
@@ -53,26 +47,27 @@ class ObstacleAvoidModel(nn.Module):
     """
     def __init__(self):
         super().__init__()
-        self.greedy_mode = True
 
         self.body = nn.Sequential(
-            ConvNormAct(12, 32, k=5, s=1, p=2),  # (3, 63, 63) -> (16, 63, 63)
-
-            FasterNetBlock(32),
-            FasterNetBlock(32),
-            ConvNormAct(32, 64, k=3, s=2, p=1),  # -> (64, 32, 32)
+            ConvNormAct(12, 32, k=3, s=1, p=1),  # (12, 63, 63) -> (32, 63, 63)
+            ConvNormAct(32, 64, k=3, s=1, p=1),
 
             FasterNetBlock(64),
-            FasterNetBlock(64),
-            ConvNormAct(64, 128, k=3, s=2, p=1),  # -> (128, 16, 16)
+            ConvNormAct(64, 128, k=3, s=2, p=1),  # -> (128, 32, 32)
 
             FasterNetBlock(128),
             FasterNetBlock(128),
-            ConvNormAct(128, 256, k=3, s=2, p=1),  # -> (256, 8, 8)
+            FasterNetBlock(128),
+            ConvNormAct(128, 256, k=3, s=2, p=1),  # -> (256, 16, 16)
 
             FasterNetBlock(256),
             FasterNetBlock(256),
-            ConvNormAct(256, 512, k=3, s=2, p=1),  # -> (512, 4, 4)
+            FasterNetBlock(256),
+            ConvNormAct(256, 512, k=3, s=2, p=1),  # -> (512, 8, 8)
+
+            FasterNetBlock(512),
+            FasterNetBlock(512),
+            ConvNormAct(512, 1024, k=3, s=2, p=1),  # -> (1024, 4, 4)
         )
 
         self.value_head = OutputHead(out_size=1)

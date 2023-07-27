@@ -30,6 +30,10 @@ class MemoryTuple:
         self.next_state: VehicleState   = None
         self.done:       bool           = None
 
+    @property
+    def is_human_action(self):
+        return self.action.is_human_action
+
 
     def isComplete(self):
         return self.state is not None and \
@@ -55,20 +59,23 @@ class MemoryTuple:
         rewards = []
         next_states = []
         dones = []
+        human_action_mask = []
         for memory in memories:
             states.append(memory.state)
             actions.append(memory.action)
             rewards.append(memory.reward)
             next_states.append(memory.next_state)
             dones.append(memory.done)
+            human_action_mask.append(memory.is_human_action)
 
         state_tensors = VehicleState.makeBatch(states)
         action_tensor = VehicleAction.makeBatch(actions)
         reward_tensor = torch.tensor(rewards, dtype=torch.float32, device=cls.device)
         next_state_tensors = VehicleState.makeBatch(next_states)
         done_tensor = torch.tensor(dones, dtype=torch.bool, device=cls.device)
+        human_action_mask_tensor = torch.tensor(human_action_mask, dtype=torch.bool, device=cls.device)
 
-        result = (*state_tensors, action_tensor, reward_tensor, *next_state_tensors, done_tensor)
+        result = (*state_tensors, action_tensor, reward_tensor, *next_state_tensors, done_tensor, human_action_mask_tensor)
         return result
 
 

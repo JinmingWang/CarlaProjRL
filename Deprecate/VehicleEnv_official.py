@@ -431,7 +431,7 @@ if __name__ == '__main__':
     agent = HumanAgent()
 
     import yaml
-    with open("config_1.yaml", 'r') as in_file:
+    with open("../config_sparse_lidar.yaml", 'r') as in_file:
         configs = yaml.load(in_file, Loader=yaml.FullLoader)
     configs["display"] = False
 

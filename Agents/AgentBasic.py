@@ -63,7 +63,7 @@ class AgentBasic:
         return loss.item()
 
 
-class ShadowAgentBasic:
+class OnlyInferAgentBasic:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     def __init__(self, base_agent: AgentBasic):
         self.model = base_agent.createModel()
@@ -72,25 +72,20 @@ class ShadowAgentBasic:
 
         self.epsilon = base_agent.configs["epsilon"]
 
-        self.rand_throttle_brake = np.random.rand() * 4 - 2
+        self.rand_speed = np.random.rand() * 4 - 2
         self.rand_steer = np.random.rand() * 2 - 1
-        self.random_iter = 0
-        self.switch_iter = 10
+        self.random_count = 0
+        self.repeat_number = base_agent.configs["n_repeat_rand_actions"]
 
-    def getRandomAction(self) -> VehicleAction:
-        # return action as a 3D vector (throttle 0~1, brake 0~1, steer -1~1)
-        if self.random_iter < self.switch_iter:
-            self.random_iter += 1
-        else:
-            self.random_iter = 0
-            self.rand_throttle_brake = np.random.rand() * 4 - 2
-            self.rand_steer = np.random.rand() * 2 - 1
-
-        return VehicleAction(self.rand_throttle_brake, self.rand_steer)
+    def updateRandomAction(self) -> None:
+        """ Update random action """
+        self.rand_speed = np.random.rand() * 4 - 2
+        self.rand_steer = np.random.rand() * 2 - 1
 
 
     def getAction(self, state: VehicleState) -> VehicleAction:
-        # return action as a 3D vector (throttle 0~1, brake 0~1, steer -1~1)
-        return self.getRandomAction()
+        """ Just get a random action """
+        self.updateRandomAction()
+        return VehicleAction(self.rand_speed, self.rand_steer)
 
 

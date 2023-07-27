@@ -29,6 +29,16 @@ class ConvNormAct(nn.Module):
         return self.act(self.norm(self.conv(x)))
 
 
+class DWConvNormAct(nn.Sequential):
+    def __init__(self, in_c: int, out_c: int, k: int, s: int = 1, p: int = 0, d: int = 1, g: int = 1,
+                 norm: nn.Module = None, act: nn.Module = None):
+        super().__init__(
+            nn.Conv2d(in_c, in_c, kernel_size=k, stride=s, padding=p, dilation=d, groups=in_c),
+            ConvNormAct(in_c, out_c, k=1, s=1, p=0, g=g, norm=norm, act=act)
+        )
+
+
+
 class PartialConv(nn.Module):
     """
     This is Partial Convolution Layer introduced in
@@ -105,6 +115,7 @@ class ModelWrapper(nn.Module):
 
 def inferSpeedTest(model, input_shapes: List[List[int]], device="cuda", batch_size: int=1):
     from time import time
+    model.to(device)
     model.eval()
     print("Start inference speed test on model %s" % model.__class__.__name__)
     with torch.no_grad():

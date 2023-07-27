@@ -1,5 +1,5 @@
 from TrainUtils import *
-from Agents.AgentBasic import AgentBasic, ShadowAgentBasic
+from Agents.AgentBasic import AgentBasic, OnlyInferAgentBasic
 import torch.nn as nn
 import yaml
 from Deprecate.CompositeDQN import CompositeDQN
@@ -128,7 +128,7 @@ class DQNAgent(AgentBasic):
         return loss.item()
 
 
-class ShadowDQNAgent(ShadowAgentBasic):
+class OnlyInferDQNAgent(OnlyInferAgentBasic):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     def __init__(self, base_agent: DQNAgent):
         super().__init__(base_agent)

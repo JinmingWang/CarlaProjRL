@@ -1,3 +1,5 @@
+import pickle
+
 import cv2
 import numpy as np
 import torch
@@ -21,9 +23,8 @@ from Agents.HumanAgent import HumanAgent
 
 
 class VehicleEnv:
-    POINT_DIST = 10.0
-    STEP_TICKS = 1
-    MAX_N_STEPS = 5000
+    POINT_SPARSITY = 10.0
+    MAX_N_STEPS = 10000
     lidar_numpy = None
 
 
@@ -35,7 +36,7 @@ class VehicleEnv:
         self.world = self.client.get_world()
         self.loadWorld(configs["world"])
 
-        self.route_planner = GlobalRoutePlanner(self.world.get_map(), sampling_resolution=self.POINT_DIST)
+        self.route_planner = GlobalRoutePlanner(self.world.get_map(), sampling_resolution=self.POINT_SPARSITY)
 
         self.blueprint_lib = self.world.get_blueprint_library()
 
@@ -83,7 +84,7 @@ class VehicleEnv:
         self.setupRouteVehicle()
 
         gps_transform = carla.Transform(carla.Location(x=0.0, y=0.0, z=0.0))
-        lidar_transform = carla.Transform(carla.Location(x=0.0, z=2.5))
+        lidar_transform = carla.Transform(carla.Location(x=0.0, z=self.configs["lidar_height"]))
 
         self.setupLidar(lidar_transform)
         self.setupGnss(gps_transform)
@@ -112,10 +113,19 @@ class VehicleEnv:
         """
         # get random points, n_other_actors points for other vehicles and pedestrians
         # 2 points for route start and end
+        route_path = self.configs.get("route_path")
+        if route_path is not None:
+            with open(route_path, "rb") as in_file:
+                load_route = pickle.load(in_file)
+
         random_points = np.random.choice(self.world.get_map().get_spawn_points(), self.configs["n_other_actors"] + 2)
-        self.route = self.generateRoute(random_points[-2], random_points[-1])
+
+        if route_path is not None:
+            self.route = load_route
+        else:
+            self.route = self.generateRoute(random_points[-2], random_points[-1])
         # Occasionally the route is invalid, regenerate until it is valid
-        while len(self.route) == 0:
+        while len(self.route) < 2:
             random_points = np.random.choice(self.world.get_map().get_spawn_points(),
                                              self.configs["n_other_actors"] + 2)
             self.route = self.generateRoute(random_points[-2], random_points[-1])
@@ -244,7 +254,7 @@ class VehicleEnv:
         x = self.lidar_numpy[:, 0] / pixel_resolution
         y = self.lidar_numpy[:, 1] / pixel_resolution
 
-        obj_height = np.clip((self.lidar_numpy[:, 2] + 2.5) * 255, 0, 255)
+        obj_height = np.clip((self.lidar_numpy[:, 2] + self.configs["lidar_height"]) * 255, 0, 255)
 
         col = np.int32(np.clip(y + 31, 0, 62))
         row = np.int32(np.clip(31 - x, 0, 62))
@@ -375,9 +385,11 @@ class VehicleEnv:
         if reward > 0.5:
             self.world.debug.draw_string(reward_location, f"{reward:.2f}", draw_shadow=False,
                                          color=carla.Color(0, 255, 0), life_time=reward/5, persistent_lines=False)
-        elif reward >= 0:
+        elif reward > 0:
             self.world.debug.draw_string(reward_location, "+", draw_shadow=False,
                                          color=carla.Color(0, 255, 0), life_time=0.1, persistent_lines=False)
+        elif reward == 0:
+            pass
         elif reward > -0.5:
             self.world.debug.draw_string(reward_location, "-", draw_shadow=False,
                                          color=carla.Color(255, 0, 0), life_time=0.1, persistent_lines=False)
@@ -453,7 +465,7 @@ class VehicleEnv:
         else:
             # positive if further
             # negative if closer
-            reward += (self.ego_prev_dist - distance_to_next_point) / self.POINT_DIST
+           reward += (self.ego_prev_dist - distance_to_next_point) / self.POINT_SPARSITY
 
         if self.collide_detected:
             # Collision speed < 20 km/h: speed_factor = 1
@@ -469,8 +481,8 @@ class VehicleEnv:
             reward += self.configs["collide_penalty"] * speed_factor
             self.collide_detected = False
 
-        if self.smooth_speed < 0.01:
-            reward += self.configs["stop_penalty"]
+        # if self.smooth_speed < 0.01:
+        #     reward += self.configs["stop_penalty"]
 
         return reward
 
@@ -545,6 +557,11 @@ class VehicleEnv:
         self.smooth_speed = self.smooth_speed * 0.2 + kmh * 0.8
 
 
+    def saveRoute(self, path: str) -> None:
+        with open(path, "wb") as out_file:
+            pickle.dump(self.route, out_file)
+
+
     def destroy(self) -> None:
         """
         Destroy eho_vehicle, other vehicles and sensors
@@ -569,7 +586,7 @@ if __name__ == '__main__':
     import yaml
 
 
-    with open("config_1.yaml", 'r') as in_file:
+    with open("config_dense_lidar.yaml", 'r') as in_file:
         configs = yaml.load(in_file, Loader=yaml.FullLoader)
 
     env = VehicleEnv(configs)
@@ -581,6 +598,9 @@ if __name__ == '__main__':
         if key_pressed == ord('r'):
             env.reset()
         if not control_signal:
-            env.step(VehicleAction.getStopAction())
+            s, r, done, k = env.step(VehicleAction.getStopAction())
         else:
-            env.step(action)
+            s, r, done, k = env.step(action)
+
+        if done:
+            env.reset()

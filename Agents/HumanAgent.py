@@ -69,10 +69,10 @@ class HumanAgent:
             return
 
         if event == cv2.EVENT_LBUTTONDOWN:
-            self.action = VehicleAction((1 - y / self.height) * 4 - 2, x / self.width * 2 - 1)
+            self.action = VehicleAction((1 - y / self.height) * 4 - 2, x / self.width * 2 - 1, is_human_action=True)
             self.control_signal_received = True
         elif event == cv2.EVENT_MOUSEMOVE and flags == cv2.EVENT_LBUTTONDOWN:
-            self.action = VehicleAction((1 - y / self.height) * 4 - 2, x / self.width * 2 - 1)
+            self.action = VehicleAction((1 - y / self.height) * 4 - 2, x / self.width * 2 - 1, is_human_action=True)
         elif event == cv2.EVENT_LBUTTONUP:
             self.control_signal_received = False
 

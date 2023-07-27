@@ -1,13 +1,13 @@
 import torch
 
 from TrainUtils import *
-from Agents.AgentBasic import AgentBasic, ShadowAgentBasic
+from Agents.AgentBasic import AgentBasic, OnlyInferAgentBasic
 import torch.nn as nn
 import torch.nn.functional as func
 import torch.optim as optim
 import yaml
 from Models.GreedyModel import GreedyModel
-from Models.ObstacleAvoidModel import ObstacleAvoidModel
+from Models.LidarModelSmall import LidarModelSmall
 from Agents.HumanAgent import HumanAgent
 import cv2
 
@@ -52,7 +52,7 @@ class A2CAgent(AgentBasic):
 
 
     def createModel(self) -> nn.Module:
-        model = ObstacleAvoidModel()
+        model = LidarModelSmall()
         if self.configs.get("model_path") is not None:
             model_path = self.configs["model_path"]
             loadModel(model, model_path)
@@ -63,10 +63,8 @@ class A2CAgent(AgentBasic):
 
         self.optimizer_value.zero_grad()
         self.optimizer_policy.zero_grad()
-        batch_S_lidarmap, batch_S_features, \
-            batch_A, batch_R, \
-            batch_nS_lidarmap, batch_nS_features, \
-            batch_T = batch_tensors
+        batch_S_lidarmap, batch_S_features, batch_A, batch_R, \
+            batch_nS_lidarmap, batch_nS_features, batch_T, batch_human_action_mask = batch_tensors
 
         # batch_A: (B, 2)
         # batch_S_features: (B, 5)
@@ -95,7 +93,19 @@ class A2CAgent(AgentBasic):
 
         value_loss = self.loss_func(V_s, td_target)  # (B)
 
-        loss = 0.1 * policy_loss + value_loss
+        # Human loss
+        # Human actions are those actions made by human
+        # They are human preferred actions, the model should learn to mimic them (imitation learning)
+        # In most cases, whatever human does is the desired behavior of the model
+        # However, human makes mistakes, plus the human actions are just one possible correct action, not the best
+        # So RL is still needed to learn the best action
+        if torch.any(batch_human_action_mask):
+            human_loss = self.loss_func(steer_mu[batch_human_action_mask], batch_A[batch_human_action_mask, 1]) + \
+                            self.loss_func(speed_mu[batch_human_action_mask], batch_A[batch_human_action_mask, 0])
+        else:
+            human_loss = 0
+
+        loss = 0.1 * policy_loss + value_loss + 0.5 * human_loss
 
         # Most of the time, the vehicle wants to greedily go to the target point
         if self.it < 200 or self.it % 5 == 0:
@@ -103,16 +113,18 @@ class A2CAgent(AgentBasic):
             loss += self.loss_func(steer_mu, target_steer)
 
         if torch.any(torch.isnan(loss)):
-            print(f"NAN LOSS, backward and optim disabled, td_err={value_loss.mean().item():.5f}, policy_loss={policy_loss.mean().item():.5f}")
+            message = f"NAN LOSS, backward and optim disabled, td_err={value_loss.mean().item():.5f}, policy_loss={policy_loss.mean().item():.5f}"
         else:
             loss.backward()
             self.optimizer_value.step()
             self.optimizer_policy.step()
 
         if self.it % self.configs["print_freq"] == 0:
-            print(f"value_loss={value_loss.mean().item():.5f}, policy_loss={policy_loss.mean().item():.5f}, "
-                  f"out_a=({speed_mu[0].item():.5f}:{speed_std[0].item():.5f}, {steer_mu[0].item():.5f}:{steer_std[0].item():.5f}), "
-                  f"target_a=({batch_A[0, 0].item():.5f}, {batch_A[0, 1].item():.5f})")
+            message = f"value_loss={value_loss.mean().item():.5f}, policy_loss={policy_loss.mean().item():.5f}, " \
+                f"out_a=({speed_mu[0].item():.5f}:{speed_std[0].item():.5f}, {steer_mu[0].item():.5f}:{steer_std[0].item():.5f}), " \
+                f"target_a=({batch_A[0, 0].item():.5f}, {batch_A[0, 1].item():.5f})"
+        else:
+            message = ""
 
         if self.it % self.configs["show_freq"] == 0:
             self.drawSample(steer_mu[0].item(), steer_std[0].item(), speed_mu[0].item(), speed_std[0].item(), 
@@ -123,10 +135,10 @@ class A2CAgent(AgentBasic):
         if self.it % self.target_update_freq == 0:
             copyModel(self.model, self.target_model)
 
-        return loss.item(), value_loss.mean().item(), policy_loss.mean().item()
+        return loss.item(), message
 
 
-class ShadowA2CAgent(ShadowAgentBasic):
+class OnlyInferA2CAgent(OnlyInferAgentBasic):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     def __init__(self, base_agent: A2CAgent):
         super().__init__(base_agent)
@@ -140,24 +152,24 @@ class ShadowA2CAgent(ShadowAgentBasic):
         # This makes the algorithm more like imitation learning
         human_action, control_signal_received, key_pressed = self.human_agent.getAction()
         if control_signal_received:
+            self.random_count = 0   # human control will break the random action sequence
             return human_action
 
         # Otherwise, use epsilon-greedy with neural network control signal or random control signal
 
-        # Only if random_iter == 0 and by some chance, we start a "series" of 10 random actions
-        if self.random_iter == 0:
+        # Only if random_iter == 0 and by some chance, we start to apply a series of random actions
+        if self.random_count == 0:
             if random.random() < self.epsilon:
                 # Once we enter this block, a pair of new random speed and steer is sampled
                 # and (look down --->)
-                self.rand_speed = np.random.rand() * 4 - 2
-                self.rand_steer = np.random.rand() * 2 - 1
-                self.random_iter += 1
+                self.updateRandomAction()
+                self.random_count += 1
                 return VehicleAction(self.rand_speed, self.rand_steer)
 
-        if self.random_iter != 0:
-            # (---> look here from above) and this block will be executed for the next 9 getAction call
-            # in conclusion, once we take random action, we take one random action 10 times
-            self.random_iter = (self.random_iter + 1) % self.switch_iter
+        if self.random_count != 0:
+            # (---> look here from above) and this block will be executed for the next several getAction call
+            # in conclusion, once we take random action, we take one random action many times
+            self.random_count = (self.random_count + 1) % self.repeat_number
             return VehicleAction(self.rand_speed, self.rand_steer)
 
         lidar_map, spacial_features = state.getTensor()

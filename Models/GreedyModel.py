@@ -8,51 +8,11 @@ This agent just greedy follow the next point in the path.
 Does not care about collision (Assumes no obstacle)
 """
 
-class GreedyModel(nn.Module):
-    """
-    Inputs:
-        - rgb_cam: (B, 3, H, W)
-        - radar_data: (B, Np, 4)
-        - target_dxdydz: (B, 3)
-
-    Outputs:
-        - Policy: (B, 55, 55) (sum to 1)
-        - State Value V(s): (B)
-    """
+class GreedyModel():
     def __init__(self, configs: Dict):
         super().__init__()
 
         self.configs = configs
-
-        self.value_head = nn.Sequential(
-            nn.Linear(10, 128), nn.ReLU(inplace=True),
-            nn.Linear(128, 128), nn.ReLU(inplace=True),
-            nn.Linear(128, 128), nn.ReLU(inplace=True),
-            nn.Linear(128, 128), nn.ReLU(inplace=True),
-            nn.Linear(128, 64), nn.ReLU(inplace=True),
-            nn.Linear(64, 32), nn.ReLU(inplace=True),
-            nn.Linear(32, 1),
-            nn.Flatten(0)
-        )
-
-        self.policy_head = nn.Sequential(
-            nn.Linear(10, 128), nn.ReLU(inplace=True),
-            nn.Linear(128, 128), nn.ReLU(inplace=True),
-            nn.Linear(128, 128), nn.ReLU(inplace=True),
-            nn.Linear(128, 128), nn.ReLU(inplace=True),
-            nn.Linear(128, 64), nn.ReLU(inplace=True),
-            nn.Linear(64, 32), nn.ReLU(inplace=True),
-            nn.Linear(32, 4),
-        )
-        # outputs: (B, 5), [V(s), mean(throttle_brake), std(throttle_brake), mean(steer), std(steer)]
-
-
-    def getUnfreezeParams(self):
-        params = []
-        params.append({"params": self.policy_head.parameters()})
-        params.append({"params": self.value_head.parameters()})
-
-        return params
 
     @staticmethod
     def getSteer(spacial_features):
@@ -72,15 +32,14 @@ class GreedyModel(nn.Module):
         return greedy_steer.detach()
 
 
-    def forward(self, rgb_cam, radar_data, spacial_features):
-
-        V_s = self.value_head(spacial_features)
-
+    def forward(self, lidar_map, spacial_features):
+        # spacial_features: (B, 5) [dx, dy, dz, compass, speed]
         steer_mu = self.getSteer(spacial_features)
-        steer_std = torch.ones_like(steer_mu) * 0.1
+        speed_mu = torch.ones_like(steer_mu)
+        state_value = torch.zeros_like(steer_mu)
+        return state_value, speed_mu, steer_mu
 
-        throttle_brake_mu = torch.ones_like(steer_mu) * 1.1
-        throttle_brake_std = torch.ones_like(steer_mu) * 0.1
+    def __call__(self, *args, **kwargs):
+        return self.forward(*args, **kwargs)
 
-        return V_s, throttle_brake_mu, throttle_brake_std, steer_mu, steer_std
 
