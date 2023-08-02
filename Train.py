@@ -39,7 +39,7 @@ def runEnvironment(configs, agent, avg_reward, shared_model, shared_model_update
     logger.log("info", "Environment Initialized, Simulation Start...")
 
     for k, v in configs.items():
-        logger.log("info", f"{k}={v}")
+        logger.log("config", f"{k}={v}")
 
     n_iter = 0
 
@@ -66,7 +66,7 @@ def runEnvironment(configs, agent, avg_reward, shared_model, shared_model_update
                 cache.put(record)
 
             n_iter += 1
-            if n_iter % configs["memory_save_freq"] == 0:
+            if n_iter % (configs["memory_save_freq"] * 4) == 0:
                 save_memory_signal.value = n_iter // configs["memory_save_freq"]
 
             if user_input == ord("r"):
@@ -79,6 +79,14 @@ def runEnvironment(configs, agent, avg_reward, shared_model, shared_model_update
                 return
 
             if done:
+                collision_count = env.collision_count
+                total_reward = env.total_reward
+                percentage_completion = env.completion_percentage
+                norm_score = env.normalized_score
+                route_length = env.route_size
+                logger.log("info", f"Episode End, Collision Count: {collision_count}, Total Reward: {total_reward}, "
+                                   f"Percentage Completion: {percentage_completion}, Normalized Score: {norm_score}, "
+                                   f"Route Length: {route_length}")
                 break
             else:
                 state = next_state

@@ -23,10 +23,9 @@ from Agents.HumanAgent import HumanAgent
 
 
 class VehicleEnv:
-    POINT_SPARSITY = 10.0
     MAX_N_STEPS = 10000
     lidar_numpy = None
-
+    lidar_map_size = 127
 
     def __init__(self, configs: Dict[str, Any]):
         self.configs = configs
@@ -36,7 +35,8 @@ class VehicleEnv:
         self.world = self.client.get_world()
         self.loadWorld(configs["world"])
 
-        self.route_planner = GlobalRoutePlanner(self.world.get_map(), sampling_resolution=self.POINT_SPARSITY)
+        self.point_sparsity = configs["point_sparsity"]
+        self.route_planner = GlobalRoutePlanner(self.world.get_map(), sampling_resolution=self.point_sparsity)
 
         self.blueprint_lib = self.world.get_blueprint_library()
 
@@ -76,7 +76,9 @@ class VehicleEnv:
         Reset the environment, clear and reset vehicle, all sensors and route
         :return: None
         """
+        self.collision_count = 0
         self.reach_count = 0
+        self.total_reward = 0
         self.step_count = 0
         self.smooth_speed = 0.0
         self.destroy()
@@ -99,7 +101,11 @@ class VehicleEnv:
 
         self.ego_prev_dist = self.getDistanceTo(self.route[0])
 
-        self.lidar_cache = [np.zeros((63, 63, 3), dtype=np.uint8) for _ in range(4)]
+        ego_loc = self.ego_vehicle.get_location()
+        self.location_record = [(-999, -999)] * 999
+        self.location_record.append((ego_loc.x, ego_loc.y))
+
+        self.lidar_cache = [np.zeros((self.lidar_map_size, self.lidar_map_size, 3), dtype=np.uint8) for _ in range(4)]
         self.lidar_map
         self.lidar_map
         self.lidar_map
@@ -116,23 +122,34 @@ class VehicleEnv:
         route_path = self.configs.get("route_path")
         if route_path is not None:
             with open(route_path, "rb") as in_file:
-                load_route = pickle.load(in_file)
+                info_dict = pickle.load(in_file)
+                load_route = [carla.Location(*xyz) for xyz in info_dict["xyz_list"]]
 
         random_points = np.random.choice(self.world.get_map().get_spawn_points(), self.configs["n_other_actors"] + 2)
 
+        # Generate route
         if route_path is not None:
             self.route = load_route
+            start_location = carla.Location(*info_dict["start_location"])
+            start_location.z += 1
+            start_rotation = carla.Rotation(pitch=info_dict["start_rotation"][0],
+                                            roll=info_dict["start_rotation"][1],
+                                            yaw=info_dict["start_rotation"][2])
+            random_points[-2] = carla.Transform(start_location, start_rotation)
         else:
             self.route = self.generateRoute(random_points[-2], random_points[-1])
         # Occasionally the route is invalid, regenerate until it is valid
-        while len(self.route) < 2:
+        while len(self.route) < 3:
             random_points = np.random.choice(self.world.get_map().get_spawn_points(),
                                              self.configs["n_other_actors"] + 2)
             self.route = self.generateRoute(random_points[-2], random_points[-1])
+        self.route_size = len(self.route)
 
         # spawn ego vehicle at the start point
         vehicle_model = random.choice(self.blueprint_lib.filter(self.configs["vehicle_model"]))
         self.ego_vehicle = self.world.spawn_actor(vehicle_model, random_points[-2])
+        # self.ego_vehicle.set_autopilot(True, self.traffic_manager.get_port())
+        # self.traffic_manager.set_path(self.ego_vehicle, self.route)
         self.actors.append(self.ego_vehicle)
 
         # spawn vehicles and set them to autopilot
@@ -148,7 +165,7 @@ class VehicleEnv:
 
     def setupLidar(self, sensor_transform: carla.Transform) -> None:
         """
-        Setup the lidar sensor
+        Set up the lidar sensor
         :param sensor_transform:  the transform of the sensor
         """
         self.lidar = self.blueprint_lib.find('sensor.lidar.ray_cast')
@@ -224,7 +241,10 @@ class VehicleEnv:
 
     @property
     def lidar_map(self):
-        temp_map = np.zeros((63, 63, 3), dtype=np.uint8)
+        current_lidar = self.lidar_numpy
+        temp_map = np.zeros((self.lidar_map_size, self.lidar_map_size, 3), dtype=np.int32)
+
+        half_size = self.lidar_map_size // 2
 
         # every pixel is 0.8m
         pixel_resolution = 0.3  # meter
@@ -240,40 +260,46 @@ class VehicleEnv:
         target_col = cos * relative_target_x - sin * relative_target_y
         target_row = sin * relative_target_x + cos * relative_target_y
         try:
-            target_col = int(np.clip(target_col + 31, 1, 61))
-            target_row = int(np.clip(target_row + 31, 1, 61))
+            target_col = int(np.clip(target_col + half_size, 1, self.lidar_map_size - 2))
+            target_row = int(np.clip(target_row + half_size, 1, self.lidar_map_size - 2))
         except ValueError:
             # Sometimes NaN, just return previous 
             print("NaN detected obtaining local lidar map")
             return np.concatenate(self.lidar_cache, axis=-1)
 
         # eliminate rows contain NaN
-        nan_rows = np.isnan(self.lidar_numpy[:, 0])
-        self.lidar_numpy = self.lidar_numpy[~nan_rows]
+        nan_rows = np.isnan(current_lidar[:, 0])
+        current_lidar = current_lidar[~nan_rows]
 
-        x = self.lidar_numpy[:, 0] / pixel_resolution
-        y = self.lidar_numpy[:, 1] / pixel_resolution
+        x = current_lidar[:, 0] / pixel_resolution
+        y = current_lidar[:, 1] / pixel_resolution
 
-        obj_height = np.clip((self.lidar_numpy[:, 2] + self.configs["lidar_height"]) * 255, 0, 255)
+        obj_height = np.clip((current_lidar[:, 2] + self.configs["lidar_height"]) * 255, 0, 1000)
 
-        col = np.int32(np.clip(y + 31, 0, 62))
-        row = np.int32(np.clip(31 - x, 0, 62))
+        col = np.int32(np.clip(y + half_size, 0, self.lidar_map_size - 1))
+        row = np.int32(np.clip(half_size - x, 0, self.lidar_map_size - 1))
 
         # Draw target point as blue
-        temp_map[target_row - 1:target_row + 2, target_col - 1:target_col + 2, 0] = 255
+        temp_map[target_row, target_col, 0] = 255
 
         # draw lidar points
         temp_map[row, col, 2] = obj_height
-        temp_map[row, col, 1] = 255 - obj_height
 
         # Draw a representation of the ego vehicle
         vehicle_length = 6
         vehicle_width = 2
-        temp_map[31 - vehicle_length:32 + vehicle_length, 31 - vehicle_width:32 + vehicle_width] = 255
+        temp_map[half_size - vehicle_length:half_size + 1 + vehicle_length, half_size - vehicle_width:half_size + 1 + vehicle_width, 1] = 255
 
-        blur_map = cv2.GaussianBlur(temp_map, (5, 5), 0)
-        zero_mask = np.all(temp_map == 0, axis=-1)
-        temp_map[zero_mask] = blur_map[zero_mask]
+        red = temp_map[:, :, 2]
+        red_tensor = torch.tensor(red, dtype=torch.float32).view(1, 1, self.lidar_map_size, self.lidar_map_size)
+        red_tensor = torch.nn.functional.max_pool2d(red_tensor, 4, stride=4, padding=0)
+        red_tensor = torch.nn.functional.upsample_nearest(red_tensor, size=(self.lidar_map_size, self.lidar_map_size))
+        red = np.int32(red_tensor.view(self.lidar_map_size, self.lidar_map_size).numpy())
+        temp_map[:, :, 2] = red
+
+        blue = temp_map[:, :, 0]
+        blue = cv2.GaussianBlur(np.float32(blue), ksize=(41, 41), sigmaX=10.0)
+        temp_map[:, :, 0] = np.int32(blue / blue.max() * 255)
 
         self.lidar_cache.append(temp_map)
         self.lidar_cache.pop(0)
@@ -369,7 +395,7 @@ class VehicleEnv:
                         roll=lidar_rot.roll)).transform(fw_vec)
 
                 point_trans = fw_vec + lidar_loc
-                point_trans.z += 0.1
+                point_trans.z += 1.0
 
                 self.world.debug.draw_point(
                     point_trans,
@@ -382,7 +408,7 @@ class VehicleEnv:
         # show reward
         ego_location = self.ego_vehicle.get_location()
         reward_location = carla.Location(ego_location.x, ego_location.y, ego_location.z+3)
-        if reward > 0.5:
+        if reward >= 0.5:
             self.world.debug.draw_string(reward_location, f"{reward:.2f}", draw_shadow=False,
                                          color=carla.Color(0, 255, 0), life_time=reward/5, persistent_lines=False)
         elif reward > 0:
@@ -408,7 +434,8 @@ class VehicleEnv:
 
         if self.configs["show_lidar_map"]:
             self.lidar_map
-            temp = cv2.resize(self.lidar_cache[-1], dsize=(255, 255), interpolation=cv2.INTER_NEAREST)
+            img = np.uint8(np.clip(self.lidar_cache[-1], 0, 255))
+            temp = cv2.resize(img, dsize=(255, 255), interpolation=cv2.INTER_NEAREST)
             cv2.line(temp, (127, 127), (127, 0), (255, 255, 255), 1)
 
             cv2.imshow("lidar map", temp)
@@ -454,6 +481,16 @@ class VehicleEnv:
         """
         reward = 0
 
+        ego_loc = self.ego_vehicle.get_location()
+        self.location_record.append((ego_loc.x, ego_loc.y))
+        self.location_record.pop(0)
+
+        # If the ego vehicle does not move at least 2 meters in 50 steps, then apply penalty
+        displacement_1000_steps = math.sqrt((self.location_record[-1][0] - self.location_record[0][0]) ** 2 + \
+                                          (self.location_record[-1][1] - self.location_record[0][1]) ** 2)
+        if displacement_1000_steps < 2:
+            reward -= 0.5
+
         # +1 if reached, and encourage forward reach,
         # backward reach is also ok, but not as good
         if reached:
@@ -465,7 +502,7 @@ class VehicleEnv:
         else:
             # positive if further
             # negative if closer
-           reward += (self.ego_prev_dist - distance_to_next_point) / self.POINT_SPARSITY
+            reward += (self.ego_prev_dist - distance_to_next_point) / self.point_sparsity
 
         if self.collide_detected:
             # Collision speed < 20 km/h: speed_factor = 1
@@ -480,6 +517,7 @@ class VehicleEnv:
                 speed_factor *= 2
             reward += self.configs["collide_penalty"] * speed_factor
             self.collide_detected = False
+            self.collision_count += 1
 
         # if self.smooth_speed < 0.01:
         #     reward += self.configs["stop_penalty"]
@@ -501,7 +539,7 @@ class VehicleEnv:
         self.world.tick()
         ego_trans = self.ego_vehicle.get_transform()
         location = ego_trans.location
-        location.z = 15
+        location.z = 15 + max(int(location.z), 0)
         rotation = ego_trans.rotation
         rotation.pitch = -60
         # rotation.yaw = -90   # face to north
@@ -542,6 +580,8 @@ class VehicleEnv:
 
         self.ego_prev_dist = distance_to_next_point
 
+        self.total_reward += reward
+
         return VehicleState(self.lidar_map, self.gnss_xyz, self.getNextTargetPoint(), self.compass, self.smooth_speed), reward, done, k
 
 
@@ -558,8 +598,32 @@ class VehicleEnv:
 
 
     def saveRoute(self, path: str) -> None:
+        # Save the route to a file
+        route = self.route[:]
+        # The first point is the current location of the ego vehicle
+        # This enables the user to customize the start point of the route
+
+        ego_trans = self.ego_vehicle.get_transform()
+        location = ego_trans.location
+        rotation = ego_trans.rotation
+        info_dict = {
+            "start_location": (location.x, location.y, location.z),
+            "start_rotation": (rotation.pitch, rotation.roll, rotation.yaw),
+            "xyz_list": [(location.x, location.y, location.z) for location in route]
+        }
         with open(path, "wb") as out_file:
-            pickle.dump(self.route, out_file)
+            pickle.dump(info_dict, out_file)
+
+    @property
+    def completion_percentage(self) -> float:
+        return self.reach_count / self.route_size
+
+    @property
+    def normalized_score(self) -> float:
+        # every waypoint reaching gives 1 reward
+        # So the total reward is proportional to the number of waypoints
+        # The absolute reward may differ due to route length
+        return self.total_reward / self.route_size
 
 
     def destroy(self) -> None:
@@ -581,18 +645,20 @@ class VehicleEnv:
 
 
 if __name__ == '__main__':
-    agent = HumanAgent()
+    agent = HumanAgent(demonstrate_mode=False)
 
     import yaml
 
 
-    with open("config_dense_lidar.yaml", 'r') as in_file:
+    with open("config_dense_lidar_no_others.yaml", 'r') as in_file:
         configs = yaml.load(in_file, Loader=yaml.FullLoader)
 
     env = VehicleEnv(configs)
     env.reset()
     while True:
         action, control_signal, key_pressed = agent.getAction()
+        if key_pressed == ord('s'):
+            env.saveRoute("route.pkl")
         if key_pressed == ord('q'):
             break
         if key_pressed == ord('r'):

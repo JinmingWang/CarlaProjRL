@@ -19,7 +19,6 @@ class VehicleState:
         self.speed_mps = speed_kmh / 3.6
 
     def __repr__(self):
-        H, W = self.lidar_map.shape
         x, y, z = self.gnss_xyz
         tx, ty, tz = self.next_point_xyz
         return f"VehicleState(src=({x},{y},{z}), dst=({tx},{ty},{tz}), compass={self.compass:.2f}, speed={self.speed_mps:.2f}m/s"

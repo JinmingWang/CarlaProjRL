@@ -32,7 +32,9 @@ class MemoryTuple:
 
     @property
     def is_human_action(self):
-        return self.action.is_human_action
+        if hasattr(self.action, "is_human_action"):
+            return self.action.is_human_action
+        return False
 
 
     def isComplete(self):
@@ -79,6 +81,54 @@ class MemoryTuple:
         return result
 
 
+class MultiStepMemoryTuple:
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    n_steps = 16
+    def __init__(self):
+        self.states:     List[VehicleState]  = []     # 17
+        self.actions:    List[VehicleAction] = []     # 16
+        self.rewards:    List[float]         = []     # 16
+
+    @property
+    def is_human_action(self):
+        result = []
+        for i in range(self.n_steps):
+            if hasattr(self.actions[i], "is_human_action"):
+                result.append(self.actions[i].is_human_action)
+        return result
+
+
+    def toTuple(self):
+        return self.states, self.actions, self.rewards
+
+
+    @classmethod
+    def fromTuple(cls, tup: Tuple):
+        memory = cls()
+        memory.states, memory.actions, memory.rewards = tup
+        return memory
+
+    @classmethod
+    def makeBatch(cls, memories: List["MultiStepMemoryTuple"]) -> Tuple:
+        batch_n_states = []
+        batch_n_actions = []
+        batch_n_rewards = []
+        human_action_mask = []
+        for memory in memories:
+            batch_n_states.append(memory.states)
+            batch_n_actions.append(memory.actions)
+            batch_n_rewards.append(memory.rewards)
+            human_action_mask.append(memory.is_human_action)
+
+        state_tensor = [VehicleState.makeBatch(batch_states) for batch_states in zip(*batch_n_states)]     # 16 * [(B, 12, 63, 63), (B, 5)]
+        action_tensor = torch.stack([VehicleAction.makeBatch(batch_actions) for batch_actions in zip(*batch_n_actions)], dim=0)     # (16, B, 2)
+        reward_tensor = torch.tensor(batch_n_rewards, dtype=torch.float32, device=cls.device).transpose(0, 1)     # (16, B)
+        human_action_mask_tensor = torch.tensor(human_action_mask, dtype=torch.bool, device=cls.device).transpose(0, 1)     # (16, B)
+
+        result = (state_tensor, action_tensor, reward_tensor, human_action_mask_tensor)
+        return result
+
+
 class MovingAverage:
     def __init__(self, window_size: int) -> None:
         self.window_size = window_size
@@ -113,10 +163,16 @@ class MemoryList(list):
     def __repr__(self):
         return f"MemoryList({self.__len__()}/{self.max_size})"
 
-    def append(self, memory: MemoryTuple) -> None:
+    def append(self, memory: Any) -> None:
         if self.__len__() == self.max_size:
             self.pop(0)
         super().append(memory)
+
+    def extend(self, memories: List[Any]) -> None:
+        overflow_size = max(len(self) + len(memories) - self.max_size, 0)
+        for _ in range(overflow_size):
+            self.pop(0)
+        super().extend(memories)
 
 
     def is_empty(self) -> bool:
@@ -134,11 +190,19 @@ class MemoryList(list):
         batch_data = random.sample(self, batch_size)
         batch_tensors = MemoryTuple.makeBatch(batch_data)
         return batch_tensors
+
+    def sampleMultiStepBatch(self, batch_size: int) -> Tuple:
+        batch_data = random.sample(self, batch_size)
+        batch_tensors = MultiStepMemoryTuple.makeBatch(batch_data)
+        return batch_tensors
     
-    def save(self, folder_path: str) -> None:
-        for i, memory in enumerate(self[::2]):
+    def save(self, folder_path: str) -> List[str]:
+        paths = []
+        for i, memory in enumerate(self):
             memory_tuple = memory.toTuple()
-            torch.save(memory_tuple, f"{folder_path}/{i:05d}.pt")
+            paths.append(f"{folder_path}/{i:05d}.pt")
+            torch.save(memory_tuple, paths[-1])
+        return paths
 
 
 class LogWriter:

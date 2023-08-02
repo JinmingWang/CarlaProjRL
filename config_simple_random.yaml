@@ -9,6 +9,7 @@ traffic_manager_port: 8000
 traffic_manager_seed: 0
 timeout: 300.0
 vehicle_model: model3
+point_sparsity: 10
 
 # Lidar sensor configuration
 lidar_height: 3

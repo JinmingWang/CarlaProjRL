@@ -2,23 +2,22 @@ import torch
 
 from Models.ModelUtils import *
 
+
 class OutputHead(nn.Module):
     def __init__(self, out_size: int):
-        # input size: (B, 1024, 4, 4)
+        # input size: (B, 512, 4, 4)
         super().__init__()
 
         self.convs = nn.Sequential(
-            ConvNormAct(1024, 512, 3, 2, 1),  # (512, 2, 2)
-            ConvNormAct(512, 256, 1, 1, 0),  # (256, 2, 2)
-            nn.MaxPool2d(2),  # (256, 1, 1)
-            nn.Flatten(1),  # (B, 256)
-            nn.Linear(256, 128),
+            DWConvNormAct(512, 128, 3, 2, 1),  # (256, 2, 2)
+            nn.MaxPool2d(2),  # (128, 1, 1)
+            nn.Flatten(1),  # (B, 128)
         )
 
         self.fc = nn.Sequential(
-            nn.Linear(128+5, 128), nn.ReLU(),
-            nn.Linear(128, 64), nn.ReLU(),
-            nn.Linear(64, 32), nn.ReLU(),
+            nn.Linear(128+5, 128), nn.ReLU(inplace=True),
+            nn.Linear(128, 64), nn.ReLU(inplace=True),
+            nn.Linear(64, 32), nn.ReLU(inplace=True),
             nn.Linear(32, out_size)
         )
 
@@ -33,8 +32,9 @@ class OutputHead(nn.Module):
         return self.fc(torch.cat([x, spacial_features], dim=1))
 
     
-
-class ObstacleAvoidModel(nn.Module):
+# 2.92ms NVIDIA 3070
+# 30ms cpu
+class LidarModelSmall(nn.Module):
     """
     Inputs:
         - lidar_map: (B, 12, 63, 63) [12 channels is composed of 4 BGR images]
@@ -49,25 +49,21 @@ class ObstacleAvoidModel(nn.Module):
         super().__init__()
 
         self.body = nn.Sequential(
-            ConvNormAct(12, 32, k=3, s=1, p=1),  # (12, 63, 63) -> (32, 63, 63)
-            ConvNormAct(32, 64, k=3, s=1, p=1),
+            DWConvNormAct(12, 32, k=5, s=2, p=2),  # (12, 127, 127) -> (32, 64, 64)
+            DWConvNormAct(32, 64, k=3, s=2, p=1),  # -> (64, 32, 32)
 
             FasterNetBlock(64),
-            ConvNormAct(64, 128, k=3, s=2, p=1),  # -> (128, 32, 32)
+            FasterNetBlock(64),
+            DWConvNormAct(64, 128, k=3, s=2, p=1),  # -> (128, 16, 16)
 
             FasterNetBlock(128),
             FasterNetBlock(128),
-            FasterNetBlock(128),
-            ConvNormAct(128, 256, k=3, s=2, p=1),  # -> (256, 16, 16)
+            DWConvNormAct(128, 256, k=3, s=2, p=1),  # -> (256, 8, 8)
 
             FasterNetBlock(256),
             FasterNetBlock(256),
             FasterNetBlock(256),
-            ConvNormAct(256, 512, k=3, s=2, p=1),  # -> (512, 8, 8)
-
-            FasterNetBlock(512),
-            FasterNetBlock(512),
-            ConvNormAct(512, 1024, k=3, s=2, p=1),  # -> (1024, 4, 4)
+            DWConvNormAct(256, 512, k=3, s=2, p=1),  # -> (512, 4, 4)
         )
 
         self.value_head = OutputHead(out_size=1)
@@ -135,25 +131,9 @@ class ObstacleAvoidModel(nn.Module):
 
 
 if __name__ == '__main__':
-    import numpy as np
-    import cv2
-    heatmaps = torch.zeros(2, 1, 16, 16, dtype=torch.float32)
-    heatmaps[0, 0, 3, 3] = 1
-    heatmaps[1, 0, 5, 9] = 1
-    model = ObstacleAvoidModel(None)
+    inferSpeedTest(LidarModelSmall(), [(12, 63, 63), (5,)], device="cpu", batch_size=1)
 
-    steer = model.getSteerFromHeatmaps(heatmaps)
-    print(steer)
-
-    heatmaps_img = np.hstack([heatmaps[0, 0].numpy(), heatmaps[1, 0].numpy()])
-    temp = cv2.resize(heatmaps_img, dsize=(512, 256))
-    for i in range(1, 16):
-        cv2.line(temp, (0, i*16), (512, i*16), 255, 1)
-    for i in range(1, 32):
-        cv2.line(temp, (i*16, 0), (i*16, 255), 255, 1)
-    cv2.circle(temp, (127, 127), 5, 255, -1)
-    cv2.circle(temp, (127+255, 127), 5, 255, -1)
-    cv2.imshow("heatmaps", temp)
-    cv2.waitKey(0)
+    # temp_model = ConvNormAct(32, 64, k=3, s=2, p=1)
+    # inferSpeedTest(temp_model, [(32, 63, 63)], device="cuda", batch_size=1)
 
 

@@ -7,9 +7,10 @@ import torch.nn.functional as func
 import torch.optim as optim
 import yaml
 from Models.GreedyModel import GreedyModel
-from Models.LidarModelSmall import LidarModelSmall
+from Models.LidarModel import LidarModelSmall
 from Agents.HumanAgent import HumanAgent
 import cv2
+from Models.GreedyModel import GreedyModel
 
 """
 Just change DQN to A2C
@@ -72,7 +73,7 @@ class A2CAgent(AgentBasic):
         # Check if NaN in batch_S_features
         if torch.any(torch.isnan(batch_S_features)) or torch.any(torch.isnan(batch_nS_features)):
             print("NaN in batch_S_features or batch_nS_features")
-            return 0, 0, 0
+            return 0, 0
 
         with torch.no_grad():
             # V_sp: (B)
@@ -107,11 +108,6 @@ class A2CAgent(AgentBasic):
 
         loss = 0.1 * policy_loss + value_loss + 0.5 * human_loss
 
-        # Most of the time, the vehicle wants to greedily go to the target point
-        if self.it < 200 or self.it % 5 == 0:
-            target_steer = GreedyModel.getSteer(batch_S_features)
-            loss += self.loss_func(steer_mu, target_steer)
-
         if torch.any(torch.isnan(loss)):
             message = f"NAN LOSS, backward and optim disabled, td_err={value_loss.mean().item():.5f}, policy_loss={policy_loss.mean().item():.5f}"
         else:
@@ -143,6 +139,14 @@ class OnlyInferA2CAgent(OnlyInferAgentBasic):
     def __init__(self, base_agent: A2CAgent):
         super().__init__(base_agent)
         self.human_agent = HumanAgent()
+        self.greedy_model = GreedyModel(base_agent.configs)
+
+    
+    def updateRandomAction(self, state) -> None:
+        """ Update random action """
+
+        self.rand_speed = np.random.rand() * 4 - 2
+        self.rand_steer = np.random.rand() * 2 - 1
 
 
     @torch.no_grad()
@@ -162,7 +166,7 @@ class OnlyInferA2CAgent(OnlyInferAgentBasic):
             if random.random() < self.epsilon:
                 # Once we enter this block, a pair of new random speed and steer is sampled
                 # and (look down --->)
-                self.updateRandomAction()
+                self.updateRandomAction(state)
                 self.random_count += 1
                 return VehicleAction(self.rand_speed, self.rand_steer)
 

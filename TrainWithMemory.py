@@ -59,13 +59,11 @@ def train(configs, n_epochs: int = 40):
     summary_writer = SummaryWriter(configs["log_dir"])
 
     dataset = MemoryDataset(configs["data_folders"])
-    dataloader = DataLoader(dataset, batch_size=32, shuffle=True, num_workers=0, collate_fn=collectFunc)
+    dataloader = DataLoader(dataset, batch_size=configs["batch_size"], shuffle=True, num_workers=0, collate_fn=collectFunc)
 
     agent = A2CAgent(configs)
 
     loss_records = MovingAverage(configs["moving_average_window"])
-    actor_loss_records = MovingAverage(configs["moving_average_window"])
-    critic_loss_records = MovingAverage(configs["moving_average_window"])
 
     it = 0
 
@@ -73,17 +71,13 @@ def train(configs, n_epochs: int = 40):
         pbar = tqdm(dataloader, desc=f"Epoch {epoch_i}")
         for batch_i, batch_data in enumerate(pbar):
 
-            loss, critic_loss, actor_loss = agent.trainStep(batch_data)
+            loss, _ = agent.trainStep(batch_data)
             loss_records.add(loss)
-            actor_loss_records.add(actor_loss)
-            critic_loss_records.add(critic_loss)
 
-            pbar.set_postfix_str(f"loss: {loss_records.get():.4f}, actor_loss: {actor_loss_records.get():.4f}, critic_loss: {critic_loss_records.get():.4f}")
+            pbar.set_postfix_str(f"loss: {loss_records.get():.4f}")
 
             if it % configs["log_freq"] == 0:
                 summary_writer.add_scalar("loss", loss_records.get(), it)
-                summary_writer.add_scalar("actor_loss", actor_loss_records.get(), it)
-                summary_writer.add_scalar("critic_loss", critic_loss_records.get(), it)
 
             it += 1
 
