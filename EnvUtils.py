@@ -126,7 +126,7 @@ class VehicleAction:
     @staticmethod
     def getIdleAction():
         # Stop moving (no brake and let the car go) and stop steering
-        return VehicleAction(1, 0)
+        return VehicleAction(0.5, 0)
 
     @classmethod
     def makeBatch(cls, actions: List["VehicleAction"]) -> torch.Tensor:

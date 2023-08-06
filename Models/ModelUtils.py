@@ -23,7 +23,7 @@ class ConvNormAct(nn.Module):
         super(ConvNormAct, self).__init__()
         self.conv = nn.Conv2d(in_c, out_c, kernel_size=k, stride=s, padding=p, dilation=d, groups=g, bias=False)
         self.norm = norm if norm is not None else nn.BatchNorm2d(out_c)
-        self.act = act if act is not None else nn.LeakyReLU(0.1, inplace=True)
+        self.act = act if act is not None else nn.LeakyReLU(0.01, inplace=True)
 
     def forward(self, x):
         return self.act(self.norm(self.conv(x)))
@@ -65,10 +65,10 @@ class FasterNetBlock(nn.Module):
         By
         Jierun Chen, Shiu-hong Kao, Hao He, Weipeng Zhuo, Song Wen, Chul-Ho Lee, S.-H. Gary Chan
         """
-    def __init__(self, in_c: int, expand: int = 2):
+    def __init__(self, in_c: int, kernel_size: int = 3, expand: int = 2):
         super().__init__()
         self.expand = expand
-        self.partial_conv = PartialConv(in_c, in_c, in_c//4, k=3, s=1, p=1)
+        self.partial_conv = PartialConv(in_c, in_c, in_c//4, k=kernel_size, s=1, p=kernel_size//2)
         self.conv1 = ConvNormAct(in_c, in_c * expand, 1)
         self.conv2 = nn.Conv2d(in_c * expand, in_c, 1)
 

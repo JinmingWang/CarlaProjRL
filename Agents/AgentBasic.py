@@ -75,10 +75,13 @@ class OnlyInferAgentBasic:
         self.rand_speed = np.random.rand() * 4 - 2
         self.rand_steer = np.random.rand() * 2 - 1
         self.random_count = 0
-        self.repeat_number = base_agent.configs["n_repeat_rand_actions"]
+        self.repeat_mean = base_agent.configs["n_repeat_rand_actions"]
+        self.repeat_std = 1.0
+        self.repeat_number = self.repeat_mean
 
     def updateRandomAction(self) -> None:
         """ Update random action """
+        self.repeat_number = int(np.random.normal(self.repeat_mean, self.repeat_std))
         self.rand_speed = np.random.rand() * 4 - 2
         self.rand_steer = np.random.rand() * 2 - 1
 

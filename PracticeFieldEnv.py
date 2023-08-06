@@ -4,9 +4,8 @@ import cv2
 import numpy as np
 import torch
 import random
-import time
 from typing import *
-import math
+
 
 from PathConfigs import *
 
@@ -22,7 +21,7 @@ from EnvUtils import VehicleState, VehicleAction
 from Agents.HumanAgent import HumanAgent
 
 
-class VehicleEnv:
+class PracticeFieldEnv:
     MAX_N_STEPS = 20000
     lidar_numpy = None
     lidar_map_size = 127
@@ -34,6 +33,20 @@ class VehicleEnv:
         self.traffic_manager = self.client.get_trafficmanager(configs["traffic_manager_port"])
         self.world = self.client.get_world()
         self.loadWorld(configs["world"])
+
+        self.practice_fields = []
+        polygons = np.array(configs["practice_fields"])  # (N, 4, 2)
+        for polygon in polygons:
+            sorted_x = np.sort(polygon[:, 0])
+            sorted_y = np.sort(polygon[:, 1])
+            # (min_x, min_y, max_x, max_y)
+            field_box = np.array([sorted_x[1], sorted_y[1], sorted_x[-2], sorted_y[-2]])
+            self.practice_fields.append(field_box)
+
+        # vehicle is initialized at the center of the field
+        self.init_loc = carla.Location(x=(self.practice_fields[0][0] + self.practice_fields[0][2]) / 2,
+                                       y=(self.practice_fields[0][1] + self.practice_fields[0][3]) / 2,
+                                       z=2.0)
 
         self.point_sparsity = configs["point_sparsity"]
         self.route_planner = GlobalRoutePlanner(self.world.get_map(), sampling_resolution=self.point_sparsity)
@@ -119,47 +132,31 @@ class VehicleEnv:
         """
         # get random points, n_other_actors points for other vehicles and pedestrians
         # 2 points for route start and end
-        route_path = self.configs.get("route_path")
-        if route_path is not None:
-            with open(route_path, "rb") as in_file:
-                info_dict = pickle.load(in_file)
-                load_route = [carla.Location(*xyz) for xyz in info_dict["xyz_list"]]
-
-        random_points = np.random.choice(self.world.get_map().get_spawn_points(), self.configs["n_other_actors"] + 2)
+        random_points = np.random.choice(self.world.get_map().get_spawn_points(), self.configs["n_other_actors"])
 
         # Generate route
-        if route_path is not None:
-            self.route = load_route
-            start_location = carla.Location(*info_dict["start_location"])
-            start_location.z += 1
-            start_rotation = carla.Rotation(pitch=info_dict["start_rotation"][0],
-                                            roll=info_dict["start_rotation"][1],
-                                            yaw=info_dict["start_rotation"][2])
-            random_points[-2] = carla.Transform(start_location, start_rotation)
-        else:
-            self.route = self.generateRoute(random_points[-2], random_points[-1])
-        # Occasionally the route is invalid, regenerate until it is valid
-        while len(self.route) < 3:
-            random_points = np.random.choice(self.world.get_map().get_spawn_points(),
-                                             self.configs["n_other_actors"] + 2)
-            self.route = self.generateRoute(random_points[-2], random_points[-1])
+        self.route = self.generateRoute()
         self.route_size = len(self.route)
 
         # spawn ego vehicle at the start point
         vehicle_model = random.choice(self.blueprint_lib.filter(self.configs["vehicle_model"]))
-        self.ego_vehicle = self.world.spawn_actor(vehicle_model, random_points[-2])
-        # self.ego_vehicle.set_autopilot(True, self.traffic_manager.get_port())
-        # self.traffic_manager.set_path(self.ego_vehicle, self.route)
+        ego_rot = carla.Rotation(pitch=0, yaw=-90, roll=0)
+        ego_transform = carla.Transform(self.init_loc, ego_rot)
+        self.ego_vehicle = self.world.spawn_actor(vehicle_model, ego_transform)
+
         self.actors.append(self.ego_vehicle)
 
         # spawn vehicles and set them to autopilot
         for i in range(self.configs["n_other_actors"]):
-            random_model = random.choice(self.blueprint_lib.filter("vehicle"))
+            vehicle_model = random.choice(self.blueprint_lib.filter("vehicle"))
+            # vehicle_model = self.blueprint_lib.find("vehicle.bh.crossbike")
             try:
-                vehicle = self.world.spawn_actor(random_model, random_points[i])
+                vehicle = self.world.spawn_actor(vehicle_model, random_points[i])
             except:
                 continue
+            # set autopilot
             vehicle.set_autopilot(True, self.traffic_manager.get_port())
+            self.traffic_manager.ignore_lights_percentage(vehicle, 0.8)
             self.actors.append(vehicle)
 
 
@@ -286,7 +283,6 @@ class VehicleEnv:
         temp_map[row, col, 2] = obj_height
 
         # Draw a representation of the ego vehicle
-
         temp_map[half_size - 7:half_size + 7, half_size - 3:half_size + 3, 1] = 255
 
         blue = temp_map[:, :, 0]
@@ -339,24 +335,29 @@ class VehicleEnv:
         return distance, distance < self.configs["reach_threshold"]
 
 
-    def generateRoute(self, source: carla.Transform, destination: carla.Transform) -> List[carla.Location]:
+    def generateRoute(self, route_length: int = 100) -> List[carla.Location]:
         """
-        Generate a route from current vehicle position to end
-        :param destination: a tuple of (x, y, z) representing the destination
-        :return: None
+        Generate a route by randomly select points within practice field
+        field_box = (min_x, min_y, max_x, max_y)
+        and ensure that the distance between adjacent waypoints is larger than reaching threshold
         """
-        start_location = source.location
-        end_location = destination.location
-        route = self.route_planner.trace_route(start_location, end_location)
-        if len(route) == 0:
-            return route
+        reach_distance = self.configs["reach_threshold"]
+        route = [self.init_loc]
+        for _ in range(route_length - 1):
 
-        locations = [route[0][0].transform.location]
-        for waypoint in route[1:]:
-            # if this waypoint has different location from the previous point
-            if waypoint[0].transform.location != locations[-1]:
-                locations.append(waypoint[0].transform.location)
-        return locations
+            field_box = self.practice_fields[random.randint(len(self.practice_fields))]
+            x = np.random.uniform(field_box[0], field_box[2])
+            y = np.random.uniform(field_box[1], field_box[3])
+            distance = math.sqrt((route[-1].x - x) ** 2 + (route[-1].y - y) ** 2)
+            while distance < reach_distance:
+                field_box = self.practice_fields[random.randint(len(self.practice_fields))]
+                x = np.random.uniform(field_box[0], field_box[2])
+                y = np.random.uniform(field_box[1], field_box[3])
+                distance = math.sqrt((route[-1].x - x) ** 2 + (route[-1].y - y) ** 2)
+            route.append(carla.Location(x, y, 0))
+
+        return route[1:]
+
 
 
     def visualize(self, reward) -> None:
@@ -419,10 +420,8 @@ class VehicleEnv:
         # if attribute self.route exists, and it is not None:
         # Display the next 10 waypoints on the map
         if hasattr(self, "route") and self.route is not None:
-            # draw route on the map
-            for location in self.route[:10]:
-                point_location = carla.Location(location.x, location.y, ego_location.z + 1)
-                self.world.debug.draw_point(point_location, size=0.1, color=carla.Color(0, 255, 0), life_time=0.1)
+            point_location = carla.Location(self.route[0].x, self.route[0].y, ego_location.z)
+            self.world.debug.draw_point(point_location, size=0.1, color=carla.Color(0, 255, 0), life_time=0.1)
 
         if self.configs["show_lidar_map"]:
             self.lidar_map
@@ -431,6 +430,19 @@ class VehicleEnv:
             cv2.line(temp, (127, 127), (127, 0), (255, 255, 255), 1)
 
             cv2.imshow("lidar map", temp)
+
+        # Draw fields
+        # (min_x, min_y, max_x, max_y)
+        for field_box in self.practice_fields:
+            loc_0 = carla.Location(field_box[0], field_box[1], ego_location.z + 0.5)
+            loc_1 = carla.Location(field_box[0], field_box[3], ego_location.z + 0.5)
+            loc_2 = carla.Location(field_box[2], field_box[3], ego_location.z + 0.5)
+            loc_3 = carla.Location(field_box[2], field_box[1], ego_location.z + 0.5)
+
+            self.world.debug.draw_line(loc_0, loc_1, thickness=0.1, color=carla.Color(255, 0, 0), life_time=0.1)
+            self.world.debug.draw_line(loc_1, loc_2, thickness=0.1, color=carla.Color(255, 0, 0), life_time=0.1)
+            self.world.debug.draw_line(loc_2, loc_3, thickness=0.1, color=carla.Color(255, 0, 0), life_time=0.1)
+            self.world.debug.draw_line(loc_3, loc_0, thickness=0.1, color=carla.Color(255, 0, 0), life_time=0.1)
 
 
     def getNextTargetPoint(self) -> np.ndarray:
@@ -490,6 +502,8 @@ class VehicleEnv:
                 reward += self.configs["point_reach_reward"]
             else:
                 reward += self.configs["point_reach_reward"] * 0.75
+            # if a target is reached, then all locations records are reset
+            # in this way, we allow the vehicle to revisit past positions
             self.location_record[:999] = [(-999, -999)] * 999
             self.reach_count += 1
         else:
@@ -638,15 +652,14 @@ class VehicleEnv:
 
 
 if __name__ == '__main__':
-    agent = HumanAgent(demonstrate_mode=True)
+    agent = HumanAgent(demonstrate_mode=False)
 
     import yaml
 
-
-    with open("config_dense_lidar_no_others.yaml", 'r') as in_file:
+    with open("config_practice_1.yaml", 'r') as in_file:
         configs = yaml.load(in_file, Loader=yaml.FullLoader)
 
-    env = VehicleEnv(configs)
+    env = PracticeFieldEnv(configs)
     env.reset()
     while True:
         action, control_signal, key_pressed = agent.getAction()

@@ -1,7 +1,7 @@
 # Client and world configuration
 host: localhost
 port: 2000
-world: Town05
+world: Town02
 traffic_manager_port: 8000
 traffic_manager_seed: 0
 timeout: 300.0
@@ -26,9 +26,9 @@ point_reach_reward: 2   # fixed reward when reaching a waypoint
 
 # Training configuration
 route_path: null                # This path can be set to route.pkl to use the pre-defined route
-model_path: "Checkpoints/20230801-062941/model_epoch11.pth"
+model_path: "Checkpoints/20230805-164031/model_epoch4.pth"
 batch_size: 64
-learning_rate: 0.001
+learning_rate: 0.0001
 gamma: 0.99
 memory_size: 3500               # maximum size of memory list
 memory_save_freq: 3500          # frequency of saving memory list to disk
@@ -56,4 +56,4 @@ show_lidar_map: True    # whether to show lidar map, the current state
 # Other
 reach_threshold: 2.0    # how close from the ego vehicvle to waypoint is considered reached
 device: "cuda"          # device, cuda or cpu
-n_other_actors: 60      # number of other vehicles and pedestraints on the simulator map
+n_other_actors: 50      # number of other vehicles and pedestraints on the simulator map

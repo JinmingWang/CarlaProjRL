@@ -175,10 +175,10 @@ class MemoryList(list):
         super().extend(memories)
 
 
-    def is_empty(self) -> bool:
+    def isEmpty(self) -> bool:
         return self.__len__() == 0
 
-    def is_full(self) -> bool:
+    def isFull(self) -> bool:
         return self.__len__() == self.max_size
 
     def sampleBatch(self, batch_size: int) -> Tuple:

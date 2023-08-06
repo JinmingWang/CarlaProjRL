@@ -109,7 +109,6 @@ class HumanAgent:
             cv2.line(demo_control, self.mouse_pos, (512+100, 256), (255, 255, 255), 1)
             demo = np.zeros_like(demo_control)
             start_y = int(256 - 100 * (256 - self.mouse_pos[1]) / (512 + 100 - self.mouse_pos[0]))
-            print(start_y)
             cv2.line(demo, (0, start_y), (100, 256), (255, 255, 255), 1)
             cv2.putText(demo, str(self.action), (100, 256), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
             cv2.imshow("Control", demo_control)

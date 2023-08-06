@@ -1,16 +1,22 @@
 # Training configuration
-model_path: "Checkpoints/20230731-151124/model_epoch7.pth"
+model_path: "Checkpoints/20230804-171402/model_epoch5.pth"
 data_folders:
-  - "/media/jimmy/MyData/Data/carla/20230730-120342"
-  - "/media/jimmy/MyData/Data/carla/20230730-121109"
-  - "/media/jimmy/MyData/Data/carla/20230730-130357"
-  - "/media/jimmy/MyData/Data/carla/20230731-092704"
-  - "/media/jimmy/MyData/Data/carla/20230731-095906"
-  - "/media/jimmy/MyData/Data/carla/20230731-104733"
+  - "/media/jimmy/MyData/Data/carla/20230804-104805-p1"
+  - "/media/jimmy/MyData/Data/carla/20230804-112607-p2"
+  - "/media/jimmy/MyData/Data/carla/20230804-115457-p3"
+  - "/media/jimmy/MyData/Data/carla/20230804-144141-p4"
+  - "/media/jimmy/MyData/Data/carla/20230804-151137-t1"
+  - "/media/jimmy/MyData/Data/carla/20230804-154502-t2"
+  - "/media/jimmy/MyData/Data/carla/20230804-162950-t3"
+  - "/media/jimmy/MyData/Data/carla/20230805-122143-t3-2"
+  - "/media/jimmy/MyData/Data/carla/20230805-130934-w"
+  - "/media/jimmy/MyData/Data/carla/20230805-131732-w"
+  - "/media/jimmy/MyData/Data/carla/20230805-132633-w"
+  - "/media/jimmy/MyData/Data/carla/20230805-145425-w"
 batch_size: 256
-learning_rate: 0.001
-gamma: 0.98
-target_model_update_freq: 500
+learning_rate: 0.0001
+gamma: 0.99
+target_model_update_freq: 400
 moving_average_window: 200
 log_freq: 100
 print_freq: 100

@@ -1,12 +1,20 @@
+# This config is for PracticeFieldEnv
+# A ring road
+practice_fields:
+    - [[24.22, 12.18], [24.90, -11.92], [14.14, -8.10], [14.17, 11.23]]
+    - [[11.89, -14.97], [-9.67, -14.97], [-12.63, -24.16], [10.86, -27.34]]
+    - [[-17.69, 6.66], [-16.74, -12.22], [-25.78, -12.04], [-27.03, 9.06]]
+    - [[-17.26, 16.26], [10.51, 15.90], [11.31, 26.88], [-16.79, 26.05]]
+
 # Client and world configuration
 host: localhost
 port: 2000
-world: Town04
+world: Town03
 traffic_manager_port: 8000
 traffic_manager_seed: 0
 timeout: 300.0
 vehicle_model: model3
-point_sparsity: 10
+point_sparsity: 20
 
 # Lidar sensor configuration
 lidar_height: 3
@@ -16,25 +24,23 @@ range: "20"
 rotation_frequency: "20"
 lidar_fov_lower: "-39"
 lidar_fov_upper: "-5"
-lidar_pps: "56000"
-# lidar_pps: "32000"  # points per second, 12000 = 6 channels * 100 points per channel * 20 Hz
+lidar_pps: "32000"  # points per second, 12000 = 6 channels * 100 points per channel * 20 Hz
 
 
 # Reward config
 collide_penalty: -1     # base penalty on collision
-point_reach_reward: 1   # fixed reward when reaching a waypoint
-
+point_reach_reward: 2   # fixed reward when reaching a waypoint
 
 # Training configuration
-route_path: null #"TestCases/town05_1/route.pkl"
-model_path: "Checkpoints/20230726-162456/model_it24000.pth"
+route_path: null                # This path can be set to route.pkl to use the pre-defined route
+model_path: "Checkpoints/20230804-115457/model_it16000.pth"
 batch_size: 64
-learning_rate: 0.001
-gamma: 0.98
-memory_size: 8000               # maximum size of memory list
-memory_save_freq: 8000          # frequency of saving memory list to disk
-cache_size: 15                  # env process will keep this much memory records maximumly, records in cache will pass to train process and stored in memory list
-epsilon: 0.03                   # probability of a random action is applied multiple times in the next few steps
+learning_rate: 0.0001
+gamma: 0.99
+memory_size: 3500               # maximum size of memory list
+memory_save_freq: 3500          # frequency of saving memory list to disk
+cache_size: 10                  # env process will keep this much memory records maximumly, records in cache will pass to train process and stored in memory list
+epsilon: 0.05                   # 0.03 - 20 corresponds to around 0.35 epsilon normally
 n_repeat_rand_actions: 20       # number of times a random action is applied
 target_model_update_freq: 5000  # frequency of updating target model in A2C algorithm
 env_model_update_freq: 100      # frequency of copying the modle in train process to env process
@@ -55,6 +61,6 @@ show_lidar_map: True    # whether to show lidar map, the current state
 
 
 # Other
-reach_threshold: 2.0    # how close from the ego vehicvle to waypoint is considered reached
+reach_threshold: 2.0    # how close from the ego vehicle to waypoint is considered reached
 device: "cuda"          # device, cuda or cpu
-n_other_actors: 0      # number of other vehicles and pedestraints on the simulator map
+n_other_actors: 60      # number of other vehicles and pedestrians on the simulator map

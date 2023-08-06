@@ -29,13 +29,13 @@ class GreedyModel():
         steer_rad = torch.atan2(relative_dx, - relative_dy)
         steer_angle = steer_rad * 180 / torch.pi
         greedy_steer = func.hardtanh(steer_angle / 70, -1, 1)
-        return greedy_steer.detach()
+        return greedy_steer.detach(), -torch.sign(relative_dy)
 
 
     def forward(self, lidar_map, spacial_features):
         # spacial_features: (B, 5) [dx, dy, dz, compass, speed]
-        steer_mu = self.getSteer(spacial_features)
-        speed_mu = torch.ones_like(steer_mu)
+        steer_mu, throttle_direction = self.getSteer(spacial_features)
+        speed_mu = throttle_direction * 1.3
         state_value = torch.zeros_like(steer_mu)
         return state_value, speed_mu, steer_mu
 
