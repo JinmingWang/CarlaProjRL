@@ -105,7 +105,13 @@ class VehicleEnv:
         self.location_record = [(-999, -999)] * 999
         self.location_record.append((ego_loc.x, ego_loc.y))
 
-        self.lidar_cache = [np.zeros((self.lidar_map_size, self.lidar_map_size, 3), dtype=np.uint8) for _ in range(4)]
+        self.n_lidar_cache = 8
+        self.lidar_cache_i = 0
+        self.lidar_cache = np.zeros((self.n_lidar_cache, self.lidar_map_size, self.lidar_map_size, 3), dtype=np.float32)
+        self.lidar_map
+        self.lidar_map
+        self.lidar_map
+        self.lidar_map
         self.lidar_map
         self.lidar_map
         self.lidar_map
@@ -242,7 +248,7 @@ class VehicleEnv:
     @property
     def lidar_map(self):
         current_lidar = self.lidar_numpy
-        temp_map = np.zeros((self.lidar_map_size, self.lidar_map_size, 3), dtype=np.int32)
+        temp_map = np.zeros((self.lidar_map_size, self.lidar_map_size, 3), dtype=np.float32)
 
         half_size = self.lidar_map_size // 2
 
@@ -274,30 +280,41 @@ class VehicleEnv:
         x = current_lidar[:, 0] / pixel_resolution
         y = current_lidar[:, 1] / pixel_resolution
 
-        obj_height = np.clip((current_lidar[:, 2] + self.configs["lidar_height"]) * 255, 0, 1000)
+        obj_height = current_lidar[:, 2] + self.configs["lidar_height"]
 
         col = np.int32(np.clip(y + half_size, 0, self.lidar_map_size - 1))
         row = np.int32(np.clip(half_size - x, 0, self.lidar_map_size - 1))
+        # yaw: in place rotation
+        # pitch: head up and down
+        # roll: scroll left and right
+        # Lidar points are affected by pitch and roll, we need to rotate them back to the horizontal plane
+        vehicle_rotation = self.ego_vehicle.get_transform().rotation
+        pitch = math.radians(vehicle_rotation.pitch)
+        roll = math.radians(vehicle_rotation.roll)
+        roll_adjust = - np.tan(roll) * pixel_resolution * (half_size - col)
+        pitch_adjust = - np.tan(pitch) * pixel_resolution * (half_size - row)
+
+        obj_height = np.clip(obj_height - roll_adjust - pitch_adjust, 0, 1000)
 
         # Draw target point as blue
-        temp_map[target_row, target_col, 0] = 255
+        temp_map[target_row, target_col, 0] = 1.0
 
         # draw lidar points
         temp_map[row, col, 2] = obj_height
 
         # Draw a representation of the ego vehicle
 
-        temp_map[half_size - 7:half_size + 7, half_size - 3:half_size + 3, 1] = 255
+        temp_map[half_size - 7:half_size + 7, half_size - 3:half_size + 3, 1] = 1.0
 
         blue = temp_map[:, :, 0]
         blue = cv2.GaussianBlur(np.float32(blue), ksize=(41, 41), sigmaX=10.0)
-        temp_map[:, :, 0] = np.int32(blue / blue.max() * 255)
+        temp_map[:, :, 0] = blue / blue.max()
 
-        self.lidar_cache.append(temp_map)
-        self.lidar_cache.pop(0)
+        self.lidar_cache[self.lidar_cache_i] = temp_map
+        self.lidar_cache_i = (self.lidar_cache_i + 1) % self.n_lidar_cache
 
-        # 4 * [63, 63, 3] -> [63, 63, 12]
-        return np.concatenate(self.lidar_cache, axis=-1)
+        # [8, 127, 127, 3] -> [127, 127, 3]
+        return np.concatenate([temp_map[..., 0:2], np.max(self.lidar_cache[..., 2], axis=0)[..., np.newaxis]], axis=-1)
 
 
     def processRawGnss(self, sensor_data) -> None:
@@ -425,8 +442,9 @@ class VehicleEnv:
                 self.world.debug.draw_point(point_location, size=0.1, color=carla.Color(0, 255, 0), life_time=0.1)
 
         if self.configs["show_lidar_map"]:
-            self.lidar_map
-            img = np.uint8(np.clip(self.lidar_cache[-1], 0, 510) / 2)
+            combined_lidar_map = self.lidar_map
+            img = np.uint8(np.clip(combined_lidar_map * 255, 0, 255))
+            # img = np.uint8(np.clip(self.lidar_cache[-1], 0, 510) / 2)
             temp = cv2.resize(img, dsize=(255, 255), interpolation=cv2.INTER_NEAREST)
             cv2.line(temp, (127, 127), (127, 0), (255, 255, 255), 1)
 
@@ -495,7 +513,8 @@ class VehicleEnv:
         else:
             # positive if further
             # negative if closer
-            reward += (self.ego_prev_dist - distance_to_next_point) / self.point_sparsity
+            pass
+            # reward += (self.ego_prev_dist - distance_to_next_point) / self.point_sparsity
 
         if self.collide_detected:
             # Collision speed < 20 km/h: speed_factor = 1

@@ -31,7 +31,7 @@ class VehicleState:
         Convert state data into tensors
         :return: lidar map (CxHxW), spacial features [dx, dy, dz, compass, m/s]
         """
-        lidar_map = torch.tensor(self.lidar_map, dtype=torch.float32, device=self.device).permute(2, 0, 1).unsqueeze(0) / 255
+        lidar_map = torch.tensor(self.lidar_map, dtype=torch.float32, device=self.device).permute(2, 0, 1).unsqueeze(0)
         spacial_features = torch.cat([torch.tensor(self.next_point_xyz - self.gnss_xyz), torch.tensor([self.compass, self.speed_mps])])
 
         return lidar_map, spacial_features.unsqueeze(0).to(dtype=torch.float32, device=self.device)
@@ -42,18 +42,18 @@ class VehicleState:
         """
         Just make a list of states into batch data
         :param states: a list of VehicleState
-        :return: lidar_maps: (BxCx63x63), spacial_features: (Bx5)
+        :return: lidar_maps: (BxCx63x63), spatial_features: (Bx5)
         """
         lidar_maps = []
-        spacial_features = []
+        spatial_features = []
         for state in states:
-            lidar_map, target_dxdydz_ = state.getTensor()
+            lidar_map, spatial_feature = state.getTensor()
             lidar_maps.append(lidar_map)
-            spacial_features.append(target_dxdydz_)
+            spatial_features.append(spatial_feature)
 
         # Note that each lidar_maps can have different number of lidar_maps
         # So we cannot use torch.cat, instead, we use a list of tensors
-        return torch.cat(lidar_maps), torch.cat(spacial_features)
+        return torch.cat(lidar_maps), torch.cat(spatial_features)
 
 
 

@@ -16,7 +16,7 @@ range: "20"
 rotation_frequency: "20"
 lidar_fov_lower: "-39"
 lidar_fov_upper: "-5"
-lidar_pps: "32000"  # points per second, 12000 = 6 channels * 100 points per channel * 20 Hz
+lidar_pps: "56000"  # points per second, 12000 = 6 channels * 100 points per channel * 20 Hz
 
 
 # Reward config
@@ -26,14 +26,15 @@ point_reach_reward: 2   # fixed reward when reaching a waypoint
 
 # Training configuration
 route_path: null                # This path can be set to route.pkl to use the pre-defined route
-model_path: "Checkpoints/20230805-164031/model_epoch4.pth"
-batch_size: 64
+model_path: null
+batch_size: 32
 learning_rate: 0.0001
 gamma: 0.99
-memory_size: 3500               # maximum size of memory list
-memory_save_freq: 3500          # frequency of saving memory list to disk
+memory_size: 5000               # maximum size of memory list
+memory_save_freq: 5000          # frequency of saving memory list to disk
 cache_size: 10                  # env process will keep this much memory records maximumly, records in cache will pass to train process and stored in memory list
-epsilon: 0.05                   # 0.03 - 20 corresponds to around 0.35 epsilon normally
+epsilon: 0.02                   # 0.03 - 20 corresponds to around 0.35 epsilon normally
+greedy_rand_action_prob: 0.25   # If not random action, the probability of choosing the greedy action from greedy agent
 n_repeat_rand_actions: 20       # number of times a random action is applied
 target_model_update_freq: 5000  # frequency of updating target model in A2C algorithm
 env_model_update_freq: 100      # frequency of copying the modle in train process to env process
@@ -56,4 +57,4 @@ show_lidar_map: True    # whether to show lidar map, the current state
 # Other
 reach_threshold: 2.0    # how close from the ego vehicvle to waypoint is considered reached
 device: "cuda"          # device, cuda or cpu
-n_other_actors: 50      # number of other vehicles and pedestraints on the simulator map
+n_other_actors: 40      # number of other vehicles and pedestraints on the simulator map

@@ -102,7 +102,7 @@ def runEnvironment():
 
 
 if __name__ == '__main__':
-    with open("config_dense_lidar.yaml", 'r') as in_file:
+    with open("config_weakness_gather.yaml", 'r') as in_file:
         configs = yaml.load(in_file, Loader=yaml.FullLoader)
 
     configs["epsilon"] = 0

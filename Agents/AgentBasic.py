@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 
 from EnvUtils import VehicleState, VehicleAction
+from Models.GreedyModel import GreedyModel
 
 """
 PPO
@@ -70,6 +71,8 @@ class OnlyInferAgentBasic:
         self.model.to(self.device)
         self.model.eval()
 
+        self.greedy_model = GreedyModel(base_agent.configs)
+
         self.epsilon = base_agent.configs["epsilon"]
 
         self.rand_speed = np.random.rand() * 4 - 2
@@ -78,6 +81,14 @@ class OnlyInferAgentBasic:
         self.repeat_mean = base_agent.configs["n_repeat_rand_actions"]
         self.repeat_std = 1.0
         self.repeat_number = self.repeat_mean
+        self.greedy_prob = base_agent.configs["greedy_rand_action_prob"]
+
+
+    def getGreedyAction(self, state) -> VehicleAction:
+        lidar_map, spacial_features = state.getTensor()
+        V_s, speed_mu, steer_mu = self.greedy_model(lidar_map, spacial_features)
+        return VehicleAction(speed_mu, steer_mu)  # (B, 2)
+
 
     def updateRandomAction(self) -> None:
         """ Update random action """

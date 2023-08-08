@@ -118,7 +118,11 @@ class PracticeFieldEnv:
         self.location_record = [(-999, -999)] * 999
         self.location_record.append((ego_loc.x, ego_loc.y))
 
-        self.lidar_cache = [np.zeros((self.lidar_map_size, self.lidar_map_size, 3), dtype=np.uint8) for _ in range(4)]
+        self.lidar_cache = [np.zeros((self.lidar_map_size, self.lidar_map_size, 3), dtype=np.uint8) for _ in range(8)]
+        self.lidar_map
+        self.lidar_map
+        self.lidar_map
+        self.lidar_map
         self.lidar_map
         self.lidar_map
         self.lidar_map
@@ -275,6 +279,17 @@ class PracticeFieldEnv:
 
         col = np.int32(np.clip(y + half_size, 0, self.lidar_map_size - 1))
         row = np.int32(np.clip(half_size - x, 0, self.lidar_map_size - 1))
+        # yaw: in place rotation
+        # pitch: head up and down
+        # roll: scroll left and right
+        # Lidar points are affected by pitch and roll, we need to rotate them back to the horizontal plane
+        vehicle_rotation = self.ego_vehicle.get_transform().rotation
+        pitch = math.radians(vehicle_rotation.pitch)
+        roll = math.radians(vehicle_rotation.roll)
+        roll_adjust = np.clip(- np.tan(roll) * pixel_resolution * (half_size - col) * 255, 0, 1000)
+        pitch_adjust = np.clip(- np.tan(pitch) * pixel_resolution * (half_size - row) * 255, 0, 1000)
+
+        obj_height = obj_height - roll_adjust - pitch_adjust
 
         # Draw target point as blue
         temp_map[target_row, target_col, 0] = 255
@@ -292,8 +307,8 @@ class PracticeFieldEnv:
         self.lidar_cache.append(temp_map)
         self.lidar_cache.pop(0)
 
-        # 4 * [63, 63, 3] -> [63, 63, 12]
-        return np.concatenate(self.lidar_cache, axis=-1)
+        # 8 * [63, 63, 3] -> max -> [63, 63, 3]
+        return np.max(self.lidar_cache, axis=0)
 
 
     def processRawGnss(self, sensor_data) -> None:
@@ -425,7 +440,8 @@ class PracticeFieldEnv:
 
         if self.configs["show_lidar_map"]:
             self.lidar_map
-            img = np.uint8(np.clip(self.lidar_cache[-1], 0, 510) / 2)
+            img = np.uint8(np.clip(np.max(self.lidar_cache, axis=0), 0, 510) / 2)
+            # img = np.uint8(np.clip(self.lidar_cache[-1], 0, 510) / 2)
             temp = cv2.resize(img, dsize=(255, 255), interpolation=cv2.INTER_NEAREST)
             cv2.line(temp, (127, 127), (127, 0), (255, 255, 255), 1)
 

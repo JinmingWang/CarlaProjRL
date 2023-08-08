@@ -6,6 +6,7 @@ from Agents.AgentBasic import AgentBasic, OnlyInferAgentBasic
 from Agents.HumanAgent import HumanAgent
 from Agents.IdleAgent import IdleAgent
 from Agents.GreedyAgent import GreedyAgent
+from Agents.PathAgent import PathAgent
 
 from VehicleEnv import VehicleEnv
 from TrainUtils import *
@@ -22,7 +23,8 @@ agent_dict = {
     "Greedy": GreedyAgent,
     "Human": IdleAgent,
     "Random": AgentBasic,
-    "A2C": A2CAgent
+    "A2C": A2CAgent,
+    "Path": PathAgent,
 }
 
 def buildAgent(agent_name: str, agent_config_path: str):
@@ -32,15 +34,24 @@ def buildAgent(agent_name: str, agent_config_path: str):
     if agent_name == "A2C":
         agent = A2CAgent(agent_config)
         only_infer_agent = OnlyInferA2CAgent(agent)
-        only_infer_agent.epsilon = 0.0
+        only_infer_agent.greedy_prob = 0.1
+        only_infer_agent.epsilon = 0.01
+        only_infer_agent.repeat_mean = 5
     elif agent_name == "Greedy":
         only_infer_agent = GreedyAgent(agent_config)
-        only_infer_agent.epsilon = 0.0
+        only_infer_agent.epsilon = 0.05
+        only_infer_agent.repeat_mean = 5
+    elif agent_name == "Path":
+        only_infer_agent = PathAgent(agent_config)
+        only_infer_agent.epsilon = 0.00
+        only_infer_agent.greedy_prob = 0.0
+        only_infer_agent.repeat_mean = 0
     elif agent_name == "Random":
         agent = AgentBasic(agent_config)
         only_infer_agent = OnlyInferAgentBasic(agent)
     elif agent_name == "Human":
         only_infer_agent = IdleAgent(agent_config)
+
 
     return only_infer_agent
 

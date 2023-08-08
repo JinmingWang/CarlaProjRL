@@ -81,6 +81,18 @@ class FasterNetBlock(nn.Module):
 
 
 
+class InvertedResidual(nn.Sequential):
+    def __init__(self, in_c: int, expand_ratio: int = 2):
+        super().__init__(
+            ConvNormAct(in_c, in_c * expand_ratio, 1),
+            nn.Conv2d(in_c * expand_ratio, in_c, 3, 1, 1)
+        )
+
+    def forward(self, x):
+        return func.leaky_relu(super().forward(x) + x, 0.01, inplace=True)
+
+
+
 def replaceLayerByType(model: nn.Module, target_layer_type: type, new_layer_type: type, *args, **kwargs):
     for name, layer in model.named_children():
         if isinstance(layer, target_layer_type):

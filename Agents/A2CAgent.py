@@ -6,9 +6,9 @@ import torch.nn as nn
 import torch.nn.functional as func
 import torch.optim as optim
 import yaml
-from Models.GreedyModel import GreedyModel
 from Models.LidarModel import LidarModelSmall
 from Agents.HumanAgent import HumanAgent
+from Models.RLPathModel import RLPathModel
 import cv2
 from Models.GreedyModel import GreedyModel
 
@@ -53,10 +53,11 @@ class A2CAgent(AgentBasic):
 
 
     def createModel(self) -> nn.Module:
-        model = LidarModelSmall()
+        model = RLPathModel()
         if self.configs.get("model_path") is not None:
             model_path = self.configs["model_path"]
             loadModel(model, model_path)
+            print("Model loaded from", model_path)
         return model
 
 
@@ -77,7 +78,7 @@ class A2CAgent(AgentBasic):
 
         with torch.no_grad():
             # V_sp: (B)
-            V_sp, _, _ = self.target_model(batch_nS_lidarmap, batch_nS_features)
+            V_sp, _, _, _, _ = self.target_model(batch_nS_lidarmap, batch_nS_features)
             td_target = batch_R + self.gamma * V_sp * ~batch_T  # (B)
 
         V_s, speed_mu, speed_std, steer_mu, steer_std = self.model(batch_S_lidarmap, batch_S_features)
@@ -90,7 +91,7 @@ class A2CAgent(AgentBasic):
         entropy_speed = speed_distribution.entropy()
         entropy_steer = steer_distribution.entropy()
 
-        policy_loss = (-pi_speed * advantage - 1e-2 * entropy_speed).mean() + (-pi_steer * advantage - 1e-2 * entropy_steer).mean()
+        policy_loss = 0.1 * (-pi_speed * advantage - 1e-2 * entropy_speed).mean() + (-pi_steer * advantage - 1e-2 * entropy_steer).mean()
 
         value_loss = self.loss_func(V_s, td_target)  # (B)
 
@@ -101,12 +102,12 @@ class A2CAgent(AgentBasic):
         # However, human makes mistakes, plus the human actions are just one possible correct action, not the best
         # So RL is still needed to learn the best action
         if torch.any(batch_human_action_mask):
-            human_loss = self.loss_func(steer_mu[batch_human_action_mask], batch_A[batch_human_action_mask, 1]) + \
-                            self.loss_func(speed_mu[batch_human_action_mask], batch_A[batch_human_action_mask, 0])
+            human_loss = 2 * (self.loss_func(steer_mu[batch_human_action_mask], batch_A[batch_human_action_mask, 1]) + \
+                              self.loss_func(speed_mu[batch_human_action_mask], batch_A[batch_human_action_mask, 0]))
         else:
-            human_loss = 0
+            human_loss = torch.zeros(1, device=self.device, dtype=torch.float32)
 
-        loss = 0.1 * policy_loss + value_loss + 0.25 * human_loss
+        loss = policy_loss + value_loss + human_loss
 
         if torch.any(torch.isnan(loss)):
             message = f"NAN LOSS, backward and optim disabled, td_err={value_loss.mean().item():.5f}, policy_loss={policy_loss.mean().item():.5f}"
@@ -116,22 +117,23 @@ class A2CAgent(AgentBasic):
             self.optimizer_policy.step()
 
         if self.it % self.configs["print_freq"] == 0:
-            message = f"value_loss={value_loss.mean().item():.5f}, policy_loss={policy_loss.mean().item():.5f}, " \
-                f"out_a=({speed_mu[0].item():.5f}:{speed_std[0].item():.5f}, {steer_mu[0].item():.5f}:{steer_std[0].item():.5f}), " \
-                f"target_a=({batch_A[0, 0].item():.5f}, {batch_A[0, 1].item():.5f})"
+            message = f"value_loss={value_loss.mean().item():.4f}, policy_loss={policy_loss.mean().item():.4f}, " \
+                f"human_loss={human_loss.mean().item():.4f}, " \
+                f"out_a=({speed_mu[0].item():.4f}:{speed_std[0].item():.4f}, {steer_mu[0].item():.4f}:{steer_std[0].item():.4f}), " \
+                f"target_a=({batch_A[0, 0].item():.4f}, {batch_A[0, 1].item():.4f})"
         else:
             message = ""
 
-        if self.it % self.configs["show_freq"] == 0:
-            self.drawSample(steer_mu[0].item(), steer_std[0].item(), speed_mu[0].item(), speed_std[0].item(), 
-                            batch_S_lidarmap[0], V_s[0].item())
-            cv2.waitKey(1)
+        # if self.it % self.configs["show_freq"] == 0:
+        #     self.drawSample(steer_mu[0].item(), steer_std[0].item(), speed_mu[0].item(), speed_std[0].item(),
+        #                     batch_S_lidarmap[0], V_s[0].item())
+        #     cv2.waitKey(1)
 
         self.it += 1
         if self.it % self.target_update_freq == 0:
             copyModel(self.model, self.target_model)
 
-        return loss.item(), message
+        return loss.item(), policy_loss.item(), value_loss.item(), human_loss.item(), message
 
 
 class OnlyInferA2CAgent(OnlyInferAgentBasic):
@@ -139,7 +141,18 @@ class OnlyInferA2CAgent(OnlyInferAgentBasic):
     def __init__(self, base_agent: A2CAgent):
         super().__init__(base_agent)
         self.human_agent = HumanAgent()
-        self.greedy_model = GreedyModel(base_agent.configs)
+
+
+    @torch.no_grad()
+    def getActionFromDistribution(self, state: VehicleState) -> VehicleAction:
+        lidar_map, spacial_features = state.getTensor()
+        V_s, speed_mu, speed_std, steer_mu, steer_std = self.model(lidar_map, spacial_features)
+        # Randomly sample speed from speed distribution
+        speed_distribution = torch.distributions.Normal(speed_mu, speed_std)
+        speed = speed_distribution.sample()
+        steer_distribution = torch.distributions.Normal(steer_mu, steer_std)
+        steer = steer_distribution.sample()
+        return VehicleAction(speed.item(), steer.item())
 
 
     @torch.no_grad()
@@ -169,7 +182,10 @@ class OnlyInferA2CAgent(OnlyInferAgentBasic):
             self.random_count = (self.random_count + 1) % self.repeat_number
             return VehicleAction(self.rand_speed, self.rand_steer)
 
-        lidar_map, spacial_features = state.getTensor()
-        V_s, speed_mu, steer_mu = self.model(lidar_map, spacial_features)
+        if random.random() < self.greedy_prob:
+            return self.getGreedyAction(state)
+        else:
+            lidar_map, spacial_features = state.getTensor()
+            V_s, speed_mu, speed_std, steer_mu, steer_std = self.model(lidar_map, spacial_features)
         return VehicleAction(speed_mu, steer_mu)  # (B, 2)
 

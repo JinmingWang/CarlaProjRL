@@ -1,7 +1,7 @@
 
-test_agent: "A2C"
+test_agent: "Path"
 agent_config_path: "config_dense_lidar.yaml"
-n_trials: 2
+n_trials: 1
 test_case_dir: "TestCases/town02_1"
 log_dir: "Logs"
 

@@ -9,7 +9,7 @@ class OutputHead(nn.Module):
         super().__init__()
 
         self.convs = nn.Sequential(
-            DWConvNormAct(512, 128, 3, 2, 1),  # (256, 2, 2)
+            ConvNormAct(512, 128, 3, 2, 1),  # (256, 2, 2)
             nn.Conv2d(128, 128, 2, 1, 0),  # (128, 1, 1)
             nn.ReLU(inplace=True),
             nn.Flatten(1),  # (B, 128)
@@ -33,8 +33,8 @@ class OutputHead(nn.Module):
         return self.fc(torch.cat([x, spacial_features], dim=1))
 
     
-# 2.92ms NVIDIA 3070
-# 30ms cpu
+# With DWConv and FasterNetBlock = 39 s = 25.62 it/s
+# Without DWConv = [01:17<00:00, 12.97it/s]
 class LidarModelSmall(nn.Module):
     """
     Inputs:
@@ -50,23 +50,22 @@ class LidarModelSmall(nn.Module):
         super().__init__()
 
         self.body = nn.Sequential(
-            DWConvNormAct(12, 64, k=5, s=2, p=2),  # (12, 127, 127) -> (32, 64, 64), rf=5
+            ConvNormAct(3, 32, k=5, s=2, p=2),  # (12, 127, 127) -> (32, 64, 64), rf+=5
 
-            FasterNetBlock(64, kernel_size=5),     # rf=5+8=13
-            FasterNetBlock(64, kernel_size=5),     # rf=13+8=21
-            DWConvNormAct(64, 64, k=3, s=2, p=1),  # -> (64, 32, 32), rf=21+4=25
+            FasterNetBlock(32),     # rf+=8
+            ConvNormAct(32, 64, k=3, s=2, p=1),  # -> (64, 32, 32), rf=21+=4
 
             FasterNetBlock(64),     # rf=25+8=33
             FasterNetBlock(64),     # rf=33+8=41
-            DWConvNormAct(64, 128, k=3, s=2, p=1),  # -> (128, 16, 16), rf=41+8=49
+            ConvNormAct(64, 128, k=3, s=2, p=1),  # -> (128, 16, 16), rf=41+8=49
 
             FasterNetBlock(128),    # rf=49+16=65
             FasterNetBlock(128),    # rf=65+16=81
-            DWConvNormAct(128, 256, k=3, s=2, p=1),  # -> (256, 8, 8), rf=81+16=97
+            ConvNormAct(128, 256, k=3, s=2, p=1),  # -> (256, 8, 8), rf=81+16=97
 
             FasterNetBlock(256),    # rf=97+32=129
             FasterNetBlock(256),    # rf=129+32=161
-            DWConvNormAct(256, 512, k=3, s=2, p=1),  # -> (512, 4, 4), rf=161+32=193
+            ConvNormAct(256, 512, k=3, s=2, p=1),  # -> (512, 4, 4), rf=161+32=193
         )
 
         self.value_head = OutputHead(out_size=1)
@@ -106,9 +105,9 @@ class LidarModelSmall(nn.Module):
         return steer.detach()
 
 
-    def forward(self, local_maps, spacial_features):
+    def forward(self, lidar_map, spacial_features):
         # Get Encoding
-        x = self.body(local_maps)
+        x = self.body(lidar_map)
 
         # Get state values from heatmap
         V_s = self.value_head(x, spacial_features).flatten(0)
@@ -128,16 +127,39 @@ class LidarModelSmall(nn.Module):
         # steer_std = torch.sigmoid(speed_steer[:, 3]) * 0.6 + 0.4
         steer_std = func.softplus(speed_steer[:, 3]) * 0.8 + 0.2
 
-        if self.training:
-            return V_s, speed_mu, speed_std, steer_mu, steer_std
-        else:
-            return V_s, speed_mu, steer_mu
+        return V_s, speed_mu, speed_std, steer_mu, steer_std
+
+
+
+
+def trainSpeedTest():
+    model = LidarModelSmall()
+    model = model.cuda()
+    model.train()
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    loss_func = nn.MSELoss()
+
+    from tqdm import tqdm
+
+    for _ in tqdm(range(1000)):
+        dummy_lidar_map = torch.randn(64, 12, 127, 127).cuda()
+        dummy_spatial_feature = torch.randn(64, 5).cuda()
+        dummy_target = torch.randn(64, 5).cuda()
+
+        optimizer.zero_grad()
+
+        V_s, speed_mu, speed_std, steer_mu, steer_std = model(dummy_lidar_map, dummy_spatial_feature)
+        loss = loss_func(torch.stack([V_s, speed_mu, speed_std, steer_mu, steer_std], dim=1), dummy_target)
+        loss.backward()
+        optimizer.step()
+
 
 
 
 if __name__ == '__main__':
-    inferSpeedTest(LidarModelSmall(), [(12, 63, 63), (5,)], device="cpu", batch_size=1)
-
+    # inferSpeedTest(LidarModelSmall(), [(12, 63, 63), (5,)], device="cpu", batch_size=1)
+    trainSpeedTest()
     # temp_model = ConvNormAct(32, 64, k=3, s=2, p=1)
     # inferSpeedTest(temp_model, [(32, 63, 63)], device="cuda", batch_size=1)
 

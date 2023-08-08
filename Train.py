@@ -12,6 +12,9 @@ from torch.utils.tensorboard import SummaryWriter
 import cv2
 import pynvml
 
+ENV = VehicleEnv
+CFG = "config_dense_lidar.yaml"
+
 
 def runEnvironment(configs, agent, avg_reward, shared_model, shared_model_update, cache, end_signal, save_memory_signal):
     """
@@ -29,7 +32,7 @@ def runEnvironment(configs, agent, avg_reward, shared_model, shared_model_update
 
     logger.log("info", "Initializing Environment...")
 
-    env = VehicleEnv(configs)
+    env = ENV(configs)
     env.reset()
 
     reward_records = MovingAverage(configs["moving_average_window"])
@@ -161,7 +164,7 @@ def trainLoop():
             dynamic_batch_size += 1
         batch_tensors = memory.sampleBatch(dynamic_batch_size)
 
-        loss, message = agent.trainStep(batch_tensors)
+        loss, policy_loss, value_loss, human_loss, message = agent.trainStep(batch_tensors)
         loss_records.add(loss)
 
         if message != "":
@@ -194,7 +197,7 @@ def prepare() -> Dict:
     except RuntimeError:
         print("RuntimeError: set_start_method('spawn') failed, maybe you have already set it.")
 
-    with open("config_dense_lidar.yaml", 'r') as in_file:
+    with open(CFG, 'r') as in_file:
         configs = yaml.load(in_file, Loader=yaml.FullLoader)
     return configs
 

@@ -1,7 +1,7 @@
 # Client and world configuration
 host: localhost
 port: 2000
-world: Town04
+world: Town03
 traffic_manager_port: 8000
 traffic_manager_seed: 0
 timeout: 300.0
@@ -21,8 +21,8 @@ lidar_pps: "56000"
 
 
 # Reward config
-collide_penalty: -1     # base penalty on collision
-point_reach_reward: 1   # fixed reward when reaching a waypoint
+collide_penalty: -0.5     # base penalty on collision
+point_reach_reward: 4   # fixed reward when reaching a waypoint
 
 
 # Training configuration

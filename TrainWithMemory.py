@@ -1,6 +1,10 @@
 # Train data with memory loaded from disk instead of interacting with environment
 
 import os
+from typing import Tuple
+
+from torch import Tensor
+
 from Agents.A2CAgent import A2CAgent
 import yaml
 from TrainUtils import *
@@ -37,16 +41,44 @@ class MemoryDataset(Dataset):
     def __len__(self):
         return len(self.file_paths)
 
-    def __getitem__(self, idx):
-        memory_tuple = MemoryTuple.fromTuple(torch.load(self.file_paths[idx]))
+    def __getitem__(self, idx) -> Tuple[VehicleState, VehicleAction, float, VehicleState, bool]:
+        # state, action, reward, next_state, done
+        memory_tuple = torch.load(self.file_paths[idx])
         return memory_tuple
 
 
+def collectFunc(batch: List[Tuple[VehicleState, VehicleAction, float, VehicleState, bool]]) -> List[Tensor]:
+    lidar_maps = []
+    spatial_features = []
+    actions = []
+    rewards = []
+    next_lidar_maps = []
+    next_spatial_features = []
+    dones = []
+    human_action_mask = []
+    for i, mem_tuple in enumerate(batch):
+        lidar_map, spatial_feature = mem_tuple[0].getTensor()
+        lidar_maps.append(lidar_map)
+        spatial_features.append(spatial_feature)
 
-def collectFunc(batch: List[MemoryTuple]) -> torch.Tensor:
-    # only return batch of local maps
-    return MemoryTuple.makeBatch(batch)
+        actions.append(mem_tuple[1].getTensor())
 
+        rewards.append(mem_tuple[2])
+
+        next_lidar_map, next_spatial_feature = mem_tuple[3].getTensor()
+        next_lidar_maps.append(next_lidar_map)
+        next_spatial_features.append(next_spatial_feature)
+
+        dones.append(mem_tuple[4])
+
+        human_action_mask.append(mem_tuple[1].is_human_action)
+
+    return torch.cat(lidar_maps), torch.cat(spatial_features), \
+        torch.cat(actions), \
+        torch.tensor(rewards, dtype=torch.float32, device=MemoryDataset.device), \
+        torch.cat(next_lidar_maps), torch.cat(next_spatial_features), \
+        torch.tensor(dones, dtype=torch.bool, device=MemoryDataset.device), \
+        torch.tensor(human_action_mask, dtype=torch.bool, device=MemoryDataset.device)
 
 
 def train(configs, n_epochs: int = 40):
@@ -64,6 +96,9 @@ def train(configs, n_epochs: int = 40):
     agent = A2CAgent(configs)
 
     loss_records = MovingAverage(configs["moving_average_window"])
+    policy_loss_records = MovingAverage(configs["moving_average_window"])
+    value_loss_records = MovingAverage(configs["moving_average_window"])
+    human_loss_records = MovingAverage(configs["moving_average_window"])
 
     it = 0
 
@@ -71,17 +106,24 @@ def train(configs, n_epochs: int = 40):
         pbar = tqdm(dataloader, desc=f"Epoch {epoch_i}")
         for batch_i, batch_data in enumerate(pbar):
 
-            loss, _ = agent.trainStep(batch_data)
+            loss, policy_loss, value_loss, human_loss, msg = agent.trainStep(batch_data)
             loss_records.add(loss)
+            policy_loss_records.add(policy_loss)
+            value_loss_records.add(value_loss)
+            human_loss_records.add(human_loss)
 
-            pbar.set_postfix_str(f"loss: {loss_records.get():.4f}")
-
-            if it % configs["log_freq"] == 0:
-                summary_writer.add_scalar("loss", loss_records.get(), it)
+            pbar.set_postfix_str(f"loss={loss:.4f}, " + msg)
 
             it += 1
 
-        saveModel(agent.model, os.path.join(configs["save_dir"], f"model_epoch{epoch_i}.pth"))
+            if it % configs["log_freq"] == 0:
+                summary_writer.add_scalar("loss", loss_records.get(), it)
+                summary_writer.add_scalar("policy_loss", policy_loss_records.get(), it)
+                summary_writer.add_scalar("value_loss", value_loss_records.get(), it)
+                summary_writer.add_scalar("human_loss", human_loss_records.get(), it)
+
+            if it % configs["model_save_freq"] == 0:
+                saveModel(agent.model, os.path.join(configs["save_dir"], f"model_{it}.pth"))
 
 
 def prepare() -> Dict:
