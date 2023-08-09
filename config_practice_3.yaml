@@ -20,7 +20,7 @@ lidar_height: 3
 noise_stddev: "0.1"
 channels: "32"
 range: "20"
-rotation_frequency: "20"
+rotation_frequency: "6"
 lidar_fov_lower: "-39"
 lidar_fov_upper: "-5"
 lidar_pps: "56000"  # points per second, 12000 = 6 channels * 100 points per channel * 20 Hz
@@ -32,8 +32,8 @@ point_reach_reward: 2   # fixed reward when reaching a waypoint
 
 # Training configuration
 route_path: null                # This path can be set to route.pkl to use the pre-defined route
-model_path: "Checkpoints/20230807-051817/model_it14000.pth"
-batch_size: 64
+model_path: "Checkpoints/20230809-160512/model_it2000.pth"
+batch_size: 32
 learning_rate: 0.0001
 gamma: 0.99
 memory_size: 5000               # maximum size of memory list

@@ -206,7 +206,7 @@ class MemoryList(list):
 
 
 class LogWriter:
-    def __init__(self, logger_title, log_dir):
+    def __init__(self, logger_title: str, log_dir: str):
         self.title = f"{logger_title:-<20}"
         self.log_path = f"{log_dir}/{logger_title}.log"
 

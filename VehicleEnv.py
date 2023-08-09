@@ -524,7 +524,7 @@ class VehicleEnv:
             # Collision speed = inf km/h: speed_factor = 20
             # Agent, please brake when you drive too fast!
             speed_factor = max(20 / (1 + math.exp(4.95 - 0.1 * self.smooth_speed)), 1)     # speed is in km/h
-            # If during collision, the the speed is still increasing, then double penalty
+            # If during collision, and the speed is still increasing, then double penalty
             if abs(action.speed) > 0.5:
                 speed_factor *= 2
             reward += self.configs["collide_penalty"] * speed_factor

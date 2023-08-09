@@ -51,11 +51,8 @@ class LidarModelSmall(nn.Module):
 
         self.body = nn.Sequential(
             ConvNormAct(3, 32, k=5, s=2, p=2),  # (12, 127, 127) -> (32, 64, 64), rf+=5
-
-            FasterNetBlock(32),     # rf+=8
             ConvNormAct(32, 64, k=3, s=2, p=1),  # -> (64, 32, 32), rf=21+=4
 
-            FasterNetBlock(64),     # rf=25+8=33
             FasterNetBlock(64),     # rf=33+8=41
             ConvNormAct(64, 128, k=3, s=2, p=1),  # -> (128, 16, 16), rf=41+8=49
 
@@ -117,15 +114,15 @@ class LidarModelSmall(nn.Module):
         # speed_mu in range [-2, 2]
         # speed_std in range [0.4, 2], why? because if std < 0.4, the peak of this gaussian is too sharp
         speed_mu = torch.tanh(speed_steer[:, 0]) * 2
-        # speed_std = torch.sigmoid(speed_steer[:, 1]) * 0.6 + 0.4
-        speed_std = func.softplus(speed_steer[:, 1]) * 0.8 + 0.2  # softplus(x) = log(1 + exp(x))
+        speed_std = torch.sigmoid(speed_steer[:, 1]) * 0.6 + 0.4
+        # speed_std = func.softplus(speed_steer[:, 1]) * 0.8 + 0.2  # softplus(x) = log(1 + exp(x))
 
         # steer ~ N(steer_mu, steer_std)
         # steer_mu in range [-1, 1]
         # steer_std in range [0.4, 1]
         steer_mu = torch.tanh(speed_steer[:, 2])
-        # steer_std = torch.sigmoid(speed_steer[:, 3]) * 0.6 + 0.4
-        steer_std = func.softplus(speed_steer[:, 3]) * 0.8 + 0.2
+        steer_std = torch.sigmoid(speed_steer[:, 3]) * 0.6 + 0.4
+        # steer_std = func.softplus(speed_steer[:, 3]) * 0.8 + 0.2
 
         return V_s, speed_mu, speed_std, steer_mu, steer_std
 

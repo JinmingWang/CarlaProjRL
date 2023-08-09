@@ -53,7 +53,7 @@ class A2CAgent(AgentBasic):
 
 
     def createModel(self) -> nn.Module:
-        model = RLPathModel()
+        model = RLPathModel("Checkpoints/PF/20230809-122943/180000.pth", 10)
         if self.configs.get("model_path") is not None:
             model_path = self.configs["model_path"]
             loadModel(model, model_path)

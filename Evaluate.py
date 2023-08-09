@@ -34,6 +34,7 @@ def buildAgent(agent_name: str, agent_config_path: str):
     if agent_name == "A2C":
         agent = A2CAgent(agent_config)
         only_infer_agent = OnlyInferA2CAgent(agent)
+        only_infer_agent.model.debug = True
         only_infer_agent.greedy_prob = 0.1
         only_infer_agent.epsilon = 0.01
         only_infer_agent.repeat_mean = 5

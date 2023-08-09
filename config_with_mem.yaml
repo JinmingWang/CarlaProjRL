@@ -1,25 +1,22 @@
 # Training configuration
-model_path: "Checkpoints/20230804-171402/model_epoch5.pth"
+model_path: "Checkpoints/20230809-165419/model_it24000.pth"
 data_folders:
-  - "/media/jimmy/MyData/Data/carla/20230804-104805-p1"
-  - "/media/jimmy/MyData/Data/carla/20230804-112607-p2"
-  - "/media/jimmy/MyData/Data/carla/20230804-115457-p3"
-  - "/media/jimmy/MyData/Data/carla/20230804-144141-p4"
-  - "/media/jimmy/MyData/Data/carla/20230804-151137-t1"
-  - "/media/jimmy/MyData/Data/carla/20230804-154502-t2"
-  - "/media/jimmy/MyData/Data/carla/20230804-162950-t3"
-  - "/media/jimmy/MyData/Data/carla/20230805-122143-t3-2"
-  - "/media/jimmy/MyData/Data/carla/20230805-130934-w"
-  - "/media/jimmy/MyData/Data/carla/20230805-131732-w"
-  - "/media/jimmy/MyData/Data/carla/20230805-132633-w"
-  - "/media/jimmy/MyData/Data/carla/20230805-145425-w"
+  - "/media/jimmy/MyData/Data/carla/20230809-014413-t1"
+  - "/media/jimmy/MyData/Data/carla/20230809-022714-t2"
+  - "/media/jimmy/MyData/Data/carla/20230809-025515-t3"
+  - "/media/jimmy/MyData/Data/carla/20230809-060000-t4"
+  - "/media/jimmy/MyData/Data/carla/20230809-063115-t5"
+  - "/media/jimmy/MyData/Data/carla/20230809-161921-p1"
+  - "/media/jimmy/MyData/Data/carla/20230809-165419-t1"
+  - "/media/jimmy/MyData/Data/carla/20230809-173928-t5"
 batch_size: 256
-learning_rate: 0.0001
+learning_rate: 0.001
 gamma: 0.99
 target_model_update_freq: 400
-moving_average_window: 200
-log_freq: 100
-print_freq: 100
+moving_average_window: 100
+model_save_freq: 200
+log_freq: 10
+print_freq: 1
 show_freq: 10
 log_dir: "/home/jimmy/Desktop/CARLA_PROJ/Logs"
 save_dir: "/home/jimmy/Desktop/CARLA_PROJ/Checkpoints"
