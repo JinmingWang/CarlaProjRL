@@ -1,6 +1,10 @@
 # CarlaProjRL
 Carla Project RL End-to-End Auto Driving with Reinforcement Learning + Imitation Learning
 
+> https://github.com/JinmingWang/CarlaProjRL
+
+### Project by Jinming Wang
+
 # Key Features
 - Carla simulator
 - Reinforcement Learning, A2C
