@@ -19,7 +19,7 @@ from Agents.HumanAgent import HumanAgent
 from Agents.IdleAgent import IdleAgent
 from Agents.GreedyAgent import GreedyAgent
 
-from VehicleEnv import VehicleEnv
+from EnvRoute import VehicleEnv
 from TrainUtils import *
 import cv2
 import yaml
@@ -49,6 +49,7 @@ def runEnvironment():
     env.reset()
 
     shadow_agent = OnlyInferA2CAgent(agent)
+    shadow_agent.model.debug = True
 
     mem_list = MemoryList(configs["memory_size"])
 

@@ -1,5 +1,6 @@
 # Training configuration
-model_path: "Checkpoints/20230809-165419/model_it24000.pth"
+model_path: "Checkpoints/20230815-095052/model_7200.pth"
+# The datasets are generated with simulation program
 data_folders:
   - "/media/jimmy/MyData/Data/carla/20230809-014413-t1"
   - "/media/jimmy/MyData/Data/carla/20230809-022714-t2"
@@ -9,10 +10,19 @@ data_folders:
   - "/media/jimmy/MyData/Data/carla/20230809-161921-p1"
   - "/media/jimmy/MyData/Data/carla/20230809-165419-t1"
   - "/media/jimmy/MyData/Data/carla/20230809-173928-t5"
+  - "/media/jimmy/MyData/Data/carla/20230810-w"
+  - "/media/jimmy/MyData/Data/carla/20230810-141432"
+  - "/media/jimmy/MyData/Data/carla/20230810-142456"
+  - "/media/jimmy/MyData/Data/carla/20230810-143449"
+  - "/media/jimmy/MyData/Data/carla/20230810-144638"
+  - "/media/jimmy/MyData/Data/carla/20230810-145510"
+  - "/media/jimmy/MyData/Data/carla/20230810-150340"
+  - "/media/jimmy/MyData/Data/carla/20230810-151240"
+  - "/media/jimmy/MyData/Data/carla/20230810-152039"
 batch_size: 256
 learning_rate: 0.001
 gamma: 0.99
-target_model_update_freq: 400
+target_model_update_freq: 2000
 moving_average_window: 100
 model_save_freq: 200
 log_freq: 10

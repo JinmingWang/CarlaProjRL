@@ -1,7 +1,7 @@
 import torch
 
 from Models.ModelUtils import *
-from Models.RLPathModel import DecisionNet
+from Models.RLPathModel import LocalPathPlanner
 import numpy as np
 import cv2
 

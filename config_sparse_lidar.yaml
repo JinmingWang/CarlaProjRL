@@ -1,4 +1,5 @@
-# This config defines a very sparse lidar sensor
+# This config is not used for now, it is used at the beginning, but the
+# information it provides is too sparse
 
 # Client and world configuration
 host: localhost

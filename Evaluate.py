@@ -8,12 +8,10 @@ from Agents.IdleAgent import IdleAgent
 from Agents.GreedyAgent import GreedyAgent
 from Agents.PathAgent import PathAgent
 
-from VehicleEnv import VehicleEnv
+from EnvRoute import VehicleEnv
 from TrainUtils import *
 import cv2
 import yaml
-import time
-import pickle
 from TrainUtils import LogWriter
 from datetime import datetime
 import os
@@ -35,9 +33,9 @@ def buildAgent(agent_name: str, agent_config_path: str):
         agent = A2CAgent(agent_config)
         only_infer_agent = OnlyInferA2CAgent(agent)
         only_infer_agent.model.debug = True
-        only_infer_agent.greedy_prob = 0.1
-        only_infer_agent.epsilon = 0.01
-        only_infer_agent.repeat_mean = 5
+        only_infer_agent.greedy_prob = 0.02
+        only_infer_agent.epsilon = 0.00
+        only_infer_agent.repeat_mean = 1
     elif agent_name == "Greedy":
         only_infer_agent = GreedyAgent(agent_config)
         only_infer_agent.epsilon = 0.05
@@ -86,7 +84,6 @@ def runTestRoute(env: VehicleEnv, only_infer_agent, n_trials: int) -> Tuple[floa
         completion_percentage (float): average completion percentage in each trial
         total_rewards (float): average total rewards in each trial
     """
-
 
     steps_spent = np.zeros(n_trials, dtype=np.float32)
     collision_counts = np.zeros(n_trials, dtype=np.int32)

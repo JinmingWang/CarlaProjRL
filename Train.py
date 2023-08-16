@@ -3,8 +3,8 @@ import os
 import time
 from Agents.AgentBasic import AgentBasic, OnlyInferAgentBasic
 from Agents.A2CAgent import A2CAgent, OnlyInferA2CAgent
-from VehicleEnv import VehicleEnv
-from PracticeFieldEnv import PracticeFieldEnv
+from EnvRoute import VehicleEnv
+from EnvPracticeField import PracticeFieldEnv
 import yaml
 import multiprocessing
 from TrainUtils import *

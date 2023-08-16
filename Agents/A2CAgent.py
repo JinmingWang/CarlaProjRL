@@ -1,20 +1,10 @@
-import torch
-
 from TrainUtils import *
 from Agents.AgentBasic import AgentBasic, OnlyInferAgentBasic
 import torch.nn as nn
-import torch.nn.functional as func
-import torch.optim as optim
-import yaml
-from Models.LidarModel import LidarModelSmall
+from Models.LidarModel import LidarModelSmall   # this is NN without local path planner
 from Agents.HumanAgent import HumanAgent
 from Models.RLPathModel import RLPathModel
 import cv2
-from Models.GreedyModel import GreedyModel
-
-"""
-Just change DQN to A2C
-"""
 
 
 class A2CAgent(AgentBasic):
@@ -40,20 +30,34 @@ class A2CAgent(AgentBasic):
         return np.exp(-((x - x0) ** 2 + (y - y0) ** 2) / (2 * std_x ** 2 + 2 * std_y ** 2))
 
 
-    def drawSample(self, mu_x, std_x, mu_y, std_y, localmap, V_s):
+    def drawSample(self, mu_x, std_x, mu_y, std_y, lidar_map, V_s) -> None:
+        """
+        Visualize output of the model
+        :param mu_x: mean steer
+        :param std_x: std steer
+        :param mu_y: mean speed
+        :param std_y: std speed
+        :param lidar_map: the input lidar map
+        :param V_s: the state value
+        :return: None
+        """
         # localmap: (12, 63, 63)
         policy_map = cv2.cvtColor(self.getPolicyMap(mu_x, std_x, mu_y, std_y), cv2.COLOR_GRAY2BGR)
-        localmap = 0.125 * localmap[0:3, ...] + 0.125 * localmap[3:6, ...] + 0.25 * localmap[6:9, ...] + 0.5 * localmap[9:12, ...]
-        localmap = cv2.resize(localmap.permute(1, 2, 0).detach().cpu().numpy(), dsize=(256, 256))
+        lidar_map = 0.125 * lidar_map[0:3, ...] + 0.125 * lidar_map[3:6, ...] + 0.25 * lidar_map[6:9, ...] + 0.5 * lidar_map[9:12, ...]
+        lidar_map = cv2.resize(lidar_map.permute(1, 2, 0).detach().cpu().numpy(), dsize=(256, 256))
 
-        temp = np.hstack([policy_map, localmap])
+        temp = np.hstack([policy_map, lidar_map])
         temp[:, 256, :] = 1
         cv2.putText(temp, f"V(s)={V_s:.4f}", (32, 32), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 1)
         cv2.imshow("Sample", temp)
 
 
     def createModel(self) -> nn.Module:
-        model = RLPathModel("Checkpoints/PF/20230809-122943/180000.pth", 10)
+        """
+        Build model here, the model path for Local Path Planner is also deinfed here
+        :return: loaded overall model
+        """
+        model = RLPathModel("Checkpoints/PathFinder/20230815-051714/440000.pth", 10)
         if self.configs.get("model_path") is not None:
             model_path = self.configs["model_path"]
             loadModel(model, model_path)
@@ -61,7 +65,12 @@ class A2CAgent(AgentBasic):
         return model
 
 
-    def trainStep(self, batch_tensors):
+    def trainStep(self, batch_tensors: List[torch.Tensor]) -> Tuple[float, float, float, float, str]:
+        """
+        Perform one training update
+        :param batch_tensors: A batch of data
+        :return: total_loss, policy_loss, value_loss, imitation_loss, message
+        """
 
         self.optimizer_value.zero_grad()
         self.optimizer_policy.zero_grad()
@@ -91,23 +100,21 @@ class A2CAgent(AgentBasic):
         entropy_speed = speed_distribution.entropy()
         entropy_steer = steer_distribution.entropy()
 
-        policy_loss = 0.1 * (-pi_speed * advantage - 1e-2 * entropy_speed).mean() + (-pi_steer * advantage - 1e-2 * entropy_steer).mean()
+        # Apply selective loss, if the action is made by human, then do not use policy loss
+        policy_loss = 0.1 * (-pi_speed * advantage - 1e-2 * entropy_speed)[~batch_human_action_mask].mean() + \
+                      0.1 * (-pi_steer * advantage - 1e-2 * entropy_steer)[~batch_human_action_mask].mean()
 
         value_loss = self.loss_func(V_s, td_target)  # (B)
 
-        # Human loss
-        # Human actions are those actions made by human
-        # They are human preferred actions, the model should learn to mimic them (imitation learning)
-        # In most cases, whatever human does is the desired behavior of the model
-        # However, human makes mistakes, plus the human actions are just one possible correct action, not the best
-        # So RL is still needed to learn the best action
         if torch.any(batch_human_action_mask):
-            human_loss = 2 * (self.loss_func(steer_mu[batch_human_action_mask], batch_A[batch_human_action_mask, 1]) + \
-                              self.loss_func(speed_mu[batch_human_action_mask], batch_A[batch_human_action_mask, 0]))
+            trust_ratio = 1     # This is a factor of how much we trust the human actions
+            imitation_loss = trust_ratio * \
+                         (self.loss_func(steer_mu[batch_human_action_mask], batch_A[batch_human_action_mask, 1]) + \
+                          self.loss_func(speed_mu[batch_human_action_mask], batch_A[batch_human_action_mask, 0]))
         else:
-            human_loss = torch.zeros(1, device=self.device, dtype=torch.float32)
+            imitation_loss = torch.zeros(1, device=self.device, dtype=torch.float32)
 
-        loss = policy_loss + value_loss + human_loss
+        loss = policy_loss + value_loss + imitation_loss
 
         if torch.any(torch.isnan(loss)):
             message = f"NAN LOSS, backward and optim disabled, td_err={value_loss.mean().item():.5f}, policy_loss={policy_loss.mean().item():.5f}"
@@ -118,7 +125,7 @@ class A2CAgent(AgentBasic):
 
         if self.it % self.configs["print_freq"] == 0:
             message = f"value_loss={value_loss.mean().item():.4f}, policy_loss={policy_loss.mean().item():.4f}, " \
-                f"human_loss={human_loss.mean().item():.4f}, " \
+                f"imitation_loss={imitation_loss.mean().item():.4f}, " \
                 f"out_a=({speed_mu[0].item():.4f}:{speed_std[0].item():.4f}, {steer_mu[0].item():.4f}:{steer_std[0].item():.4f}), " \
                 f"target_a=({batch_A[0, 0].item():.4f}, {batch_A[0, 1].item():.4f})"
         else:
@@ -133,7 +140,7 @@ class A2CAgent(AgentBasic):
         if self.it % self.target_update_freq == 0:
             copyModel(self.model, self.target_model)
 
-        return loss.item(), policy_loss.item(), value_loss.item(), human_loss.item(), message
+        return loss.item(), policy_loss.item(), value_loss.item(), imitation_loss.item(), message
 
 
 class OnlyInferA2CAgent(OnlyInferAgentBasic):
@@ -145,6 +152,11 @@ class OnlyInferA2CAgent(OnlyInferAgentBasic):
 
     @torch.no_grad()
     def getActionFromDistribution(self, state: VehicleState) -> VehicleAction:
+        """
+        This method samples an action from the policy distribution instead of returning the best action
+        :param state: input state
+        :return: action
+        """
         lidar_map, spacial_features = state.getTensor()
         V_s, speed_mu, speed_std, steer_mu, steer_std = self.model(lidar_map, spacial_features)
         # Randomly sample speed from speed distribution
@@ -157,16 +169,19 @@ class OnlyInferA2CAgent(OnlyInferAgentBasic):
 
     @torch.no_grad()
     def getAction(self, state: VehicleState) -> VehicleAction:
+        """
+        Get an action from the state (used in simulation, not training)
+        :param state: input state
+        :return: action
+        """
 
         # If human expert gives control signal, directly use it
-        # This makes the algorithm more like imitation learning
         human_action, control_signal_received, key_pressed = self.human_agent.getAction()
         if control_signal_received:
             self.random_count = 0   # human control will break the random action sequence
             return human_action
 
-        # Otherwise, use epsilon-greedy with neural network control signal or random control signal
-
+        # Random Repeat Random Actions
         # Only if random_iter == 0 and by some chance, we start to apply a series of random actions
         if self.random_count == 0:
             if random.random() < self.epsilon:
@@ -182,6 +197,8 @@ class OnlyInferA2CAgent(OnlyInferAgentBasic):
             self.random_count = (self.random_count + 1) % self.repeat_number
             return VehicleAction(self.rand_speed, self.rand_steer)
 
+        # There is also a percentage to perform greedy action
+        # greedily go towards the next waypoint (ignores obstacles)
         if random.random() < self.greedy_prob:
             return self.getGreedyAction(state)
         else:

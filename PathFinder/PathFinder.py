@@ -1,9 +1,9 @@
-# Train data with memory loaded from disk instead of interacting with environment
+"""
+This is the train code for Local Path Planner
+"""
 
 import os
-from typing import *
 
-import torch
 from torchvision import transforms
 from torch import Tensor
 
@@ -11,14 +11,23 @@ import yaml
 from TrainUtils import *
 from torch.utils.tensorboard import SummaryWriter
 
-from Models.RLPathModel import DecisionNet
+from Models.RLPathModel import LocalPathPlanner
 from Models.ModelUtils import *
 from torch.utils.data import DataLoader, Dataset
-from tqdm import tqdm
 import cv2
-from threading import Thread
 
-class MemoryDataset(Dataset):
+
+RESUME = "Checkpoints/PathFinder/20230815-051714/440000.pth"
+RAND_PROB = 0.3
+GREEDY_PROB = 0.1
+GAMMA = 0.9
+MAX_STEPS = 80
+BATCH_SIZE = 256
+CRITIC_LR = 1e-3
+ACTOR_LR = 1e-4
+
+
+class GridWorldDataset(Dataset):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     """
     dataset directory structure:
@@ -42,10 +51,22 @@ class MemoryDataset(Dataset):
                     memory_path = os.path.join(checkpoint_path, memory_file)
                     self.file_paths.append(memory_path)
 
+        print(f"MemoryDataset: {len(self.file_paths)} files found.")
+
         self.trans = transforms.Compose([
             transforms.RandomHorizontalFlip(p=0.5),
-            transforms.RandomVerticalFlip(p=0.5)
+            transforms.RandomVerticalFlip(p=0.5),
+            transforms.Lambda(self.getRandomObstacleTransform(0.01))
         ])
+
+    def getRandomObstacleTransform(self, prob: float) -> Callable[[torch.Tensor], torch.Tensor]:
+        def randomPlaceObstacle(x: torch.Tensor):
+            B, C, H, W = x.shape
+            obstacle_mask = torch.rand(B, H, W, device=x.device) < prob
+            x[:, 2, :, :] = torch.max(x[:, 2, :, :], obstacle_mask.to(torch.float32))
+            return x
+        return randomPlaceObstacle
+
 
     def __len__(self):
         return len(self.file_paths)
@@ -53,34 +74,35 @@ class MemoryDataset(Dataset):
     @staticmethod
     def lidarMap2GridWorld(lidar_map):
         # lidar map: (B, 3, 127, 127)
-        blur_map = lidar_map[:, 2, ...].unsqueeze(1)  # (B, 1, 127, 127)
-        blur_map = blur_map * (blur_map > 0.2)
-        blur_map = func.max_pool2d(blur_map, kernel_size=3, stride=1, padding=1)
-        blur_map = func.max_pool2d(blur_map, kernel_size=3, stride=1, padding=1)  # (B, 1, 127, 127)
+        obstacle_map = (lidar_map[:, 2, ...] > 0.4).unsqueeze(1)  # (B, 1, 127, 127)
 
-        danger_map = func.max_pool2d((blur_map > 0.4).to(torch.float32), kernel_size=4, stride=4, padding=2).squeeze(
-            1)  # (B, 32, 32)
+        danger_map = func.max_pool2d(obstacle_map.to(torch.float32), kernel_size=6, stride=6).squeeze(1)  # (B, 21, 21)
 
         # get all target locations
         target_locations = torch.argmax(lidar_map[:, 0].flatten(1), dim=1)  # argmax(B, 127*127) -> (B)
-        target_rows = target_locations // 127 // 4  # (B)
-        target_cols = target_locations % 127 // 4  # (B)
+        target_rows = target_locations // 127 // 6  # (B)
+        target_cols = target_locations % 127 // 6  # (B)
 
-        # Horizontal distance from target point (B, 32)
-        h_dist = torch.abs(
-            torch.arange(32, dtype=torch.float32, device=lidar_map.device).view(1, -1) - target_cols.view(-1, 1))
-        # Vertical distance from target point (B, 32)
-        v_dist = torch.abs(
-            torch.arange(32, dtype=torch.float32, device=lidar_map.device).view(1, -1) - target_rows.view(-1, 1))
-        # dist_map: (B, 32, 32)
+        # Horizontal distance from target point (B, 21)
+        h_dist = torch.abs(torch.arange(21, dtype=torch.float32, device=lidar_map.device).view(1, -1) - target_cols.view(-1, 1))
+        # Vertical distance from target point (B, 21)
+        v_dist = torch.abs(torch.arange(21, dtype=torch.float32, device=lidar_map.device).view(1, -1) - target_rows.view(-1, 1))
+        # dist_map: (B, 21, 21)
         dist_map = torch.sqrt(h_dist[:, None, :] ** 2 + v_dist[:, :, None] ** 2)
 
-        grid_world = torch.zeros((lidar_map.shape[0], 3, 32, 32), dtype=torch.float32, device=lidar_map.device)
+        grid_world = torch.zeros((lidar_map.shape[0], 3, 21, 21), dtype=torch.float32, device=lidar_map.device)
         grid_world[:, 0] = 1 - dist_map / torch.max(dist_map.flatten(0), dim=0).values.view(-1, 1, 1)
-        grid_world[:, 1, 16, 16] = 1  # agent location
+        grid_world[:, 1, 9, 10] = 1  # agent location
         grid_world[:, 2] = danger_map  # danger map
 
         return grid_world
+
+
+    def getSource(self, idx):
+        state: VehicleState = torch.load(self.file_paths[idx])[0]
+
+        lidar_map, _ = state.getTensor()  # lidar_map: (B, 3, 127, 127)
+        return lidar_map
 
 
     def __getitem__(self, idx) -> torch.Tensor:
@@ -88,7 +110,9 @@ class MemoryDataset(Dataset):
 
         lidar_map, _ = state.getTensor()    # lidar_map: (B, 3, 127, 127)
         grid_world = self.lidarMap2GridWorld(lidar_map)     # grid_world: (B, 3, 32, 32)
+        # return grid_world
         return self.trans(grid_world)
+
 
 
 def collectFunc(batch: List[torch.Tensor]) -> List[Tensor]:
@@ -101,28 +125,33 @@ class PathFinder:
 
     Game rule:
     Agent is allowed to step on obstacle, and it allowed to stay at target
-    If the agent step to obstacle or stay at obstacle, -1 reward is given
+    If the agent step to obstacle or stay at obstacle, -5 reward is given
     If the agent reach or stay at the target, 1 reward is given
+    If the agent stays at where it is, -0.1 reward is given
     If the agent go out of the world, 0 reward is given
 
     In fact, the agent cannot hit obstacle, but in some cases, the ego vehicle or the target point is very close to
     obstacles detected by lidar, and the ego vehicle or target point will appear covered or surrounded by obstacles,
     makeing the AI impossible to find a path to it, allowing passing through obstacles so the AI can find a path to 
     the target, while minimize the stepping on obstacles.
+
+    Actions:
+    The action contains UP, RIGHT, DOWN, LEFT, and IDLE
+
     """
     def __init__(self, configs):
         # --- Load dataset ---
-        self.dataset = MemoryDataset(configs["data_folders"])
+        self.dataset = GridWorldDataset(configs["data_folders"])
         self.dataloader = DataLoader(self.dataset, batch_size=1, shuffle=True, num_workers=0, collate_fn=collectFunc)
 
         # --- Define policy model, target model and optimizers ---
-        self.model: DecisionNet = DecisionNet().cuda()
-        loadModel(self.model, "Checkpoints/PF/20230809-122943/180000.pth")
-        self.target_model = DecisionNet().cuda()
+        self.model: LocalPathPlanner = LocalPathPlanner().cuda()
+        loadModel(self.model, RESUME)
+        self.target_model = LocalPathPlanner().cuda()
         copyModel(self.model, self.target_model)
         self.optimizer_critic = torch.optim.Adam([{'params': self.model.critic.parameters()},
-                                                  {'params': self.model.shared.parameters()}], lr=1e-3)
-        self.optimizer_actor = torch.optim.Adam(self.model.actor.parameters(), lr=1e-4)
+                                                  {'params': self.model.shared.parameters()}], lr=CRITIC_LR)
+        self.optimizer_actor = torch.optim.Adam(self.model.actor.parameters(), lr=ACTOR_LR)
 
         self._initStepFilter()
 
@@ -162,7 +191,7 @@ class PathFinder:
         """
         Step grid world to next state
 
-        grid_world: (1, 3, 32, 32)
+        grid_world: (1, 3, 21, 21)
         grid_world[0, 0]: value maps
         grid_world[0, 1]: agent location
         grid_world[0, 2]: obstacles
@@ -175,8 +204,8 @@ class PathFinder:
 
         is_done: only true if out of world
         """
-        agent_channel = grid_world[:, 1, ...].unsqueeze(1)  # (B, 1, 32, 32)
-        next_agent_channel = self.step_filters[action](agent_channel)  # (B, 1, 32, 32)
+        agent_channel = grid_world[:, 1, ...].unsqueeze(1)  # (B, 1, 21, 21)
+        next_agent_channel = self.step_filters[action](agent_channel)  # (B, 1, 21, 21)
         next_grid_world = grid_world.clone()
         next_grid_world[:, 1, ...] = next_agent_channel.squeeze(1)
         # uncomment this line if the passed by cells become obstacles
@@ -188,19 +217,27 @@ class PathFinder:
         # if agent is at obstacle, then hit
         is_hit = torch.any((next_grid_world[:, 1, ...] + next_grid_world[:, 2, ...]).flatten(1) == 2).to(torch.float32)
         is_out = torch.all(next_grid_world[:, 1, ...].flatten(1) == 0).to(torch.float32)
+
         reward = is_reached - 5 * is_hit
-        if action == 4:
-            reward -= 0.1   # if the agent choose to stay, the reward decrease 0.1
+
+        # grid_world[:, 1] is a mask of agent location
+        # grid_world[:, 0] is value map, pixel value corresponds to the value of agent being at this position
+        # they multiplied together only remains one value, the value of where the agent is at
+        # This reward is positive if the agent move towards the target,
+        # and it is negative if the agent is moving away from the target
+        moving_reward = (torch.sum(next_grid_world[:, 1] * next_grid_world[:, 0]) -
+                         torch.sum(grid_world[:, 1] * grid_world[:, 0]))
+        reward += 0.01 * torch.sign(moving_reward)
         return next_grid_world, reward, is_out
 
 
     def visualize(self, mem_tuple, t, wait_time=1):
         grid_world, action, reward, next_grid_world, is_done = mem_tuple
         grid_world_np = grid_world[0].permute(1, 2, 0).detach().cpu().numpy()
-        reward_int = int(reward.detach().cpu())
+        reward_f = float(reward.detach().cpu())
         next_grid_world_np = next_grid_world[0].permute(1, 2, 0).detach().cpu().numpy()
         temp = cv2.resize(np.hstack([grid_world_np, next_grid_world_np]), dsize=None, fx=8, fy=8, interpolation=cv2.INTER_NEAREST)
-        cv2.putText(temp, f"r={reward_int:2d} t={t:4d}", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        cv2.putText(temp, f"r={reward_f:.3f} t={t:4d}", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         cv2.imshow("memory tuple", temp)
         return cv2.waitKey(wait_time)
 
@@ -210,17 +247,17 @@ class PathFinder:
         memory = []
         mem_size = 20000
         target_model_update_freq = 4000
-        random_prob = 0.3
-        greedy_prob = 0.1
-        gamma = 0.98
+        random_prob = RAND_PROB
+        greedy_prob = GREEDY_PROB
+        gamma = GAMMA
         train_it = 0
         env_it = 0
-        max_steps = 100
+        max_steps = MAX_STEPS
 
         # Log writers
-        summary_writer = SummaryWriter(log_dir="Checkpoints/PF")
+        summary_writer = SummaryWriter(log_dir="Checkpoints/PathFinder")
         train_start_time = datetime.now().strftime("%Y%m%d-%H%M%S")
-        log_writer = LogWriter(train_start_time, "Checkpoints/PF")
+        log_writer = LogWriter(train_start_time, "Checkpoints/PathFinder")
 
         # Statistics record
         avg_count = 100
@@ -229,7 +266,9 @@ class PathFinder:
         avg_actor_loss = MovingAverage(avg_count)
         avg_critic_loss = MovingAverage(avg_count)
 
+        # train for 10 epochs, but actually this is not necessary, this can be while(True)
         for epoch in range(10):
+            # An episode_data is one single saved lidar map
             for episode, episode_data in enumerate(self.dataloader):
                 # region Place one episode
                 grid_world = episode_data
@@ -239,6 +278,7 @@ class PathFinder:
                 is_done = False
                 self.model.eval()
                 with torch.no_grad():
+                    # Play for one episode until the grid world game is end, or maximum step reached
                     while (n_steps < max_steps and not is_done):
                         action = self.model.getAction(grid_world, random_prob, greedy_prob)
                         next_grid_world, reward, is_done = self.step(grid_world, action)
@@ -277,8 +317,10 @@ class PathFinder:
                     continue
 
                 self.model.train()
-                for train_step in range(100):
-                    batch = random.sample(memory, 256)
+                # Train for MAX_STEPS times, because one episode is likely to have MAX_STEPS steps
+                # which provides MAX_STEPS new data
+                for train_step in range(MAX_STEPS):
+                    batch = random.sample(memory, BATCH_SIZE)
                     states, actions, rewards, next_states, is_dones = zip(*batch)
                     states = torch.cat(states, dim=0)
                     actions = torch.tensor(actions, dtype=torch.int64, device="cuda")
@@ -300,7 +342,7 @@ class PathFinder:
 
                     entropy = policies.entropy()
 
-                    actor_loss = (-policies.log_prob(actions) * adv.detach() - 0.02 * entropy).mean()
+                    actor_loss = (-policies.log_prob(actions) * adv.detach() - 0.01 * entropy).mean()
 
                     critic_loss = adv.pow(2).mean()
 
@@ -327,75 +369,27 @@ class PathFinder:
                     if train_it % 500 == 0:
                         log_writer.log("TRAIN", f"actor: {avg_actor_loss.get():.4f} critic: {avg_critic_loss.get():.4f}")
                         summary_writer.add_scalar("loss", loss.item(), train_it)
+                        summary_writer.add_scalar("actor loss", avg_actor_loss.get(), train_it)
+                        summary_writer.add_scalar("critic loss", avg_critic_loss.get(), train_it)
 
                     if train_it % 10000 == 0:
-                        saveModel(self.model, f"Checkpoints/PF/{train_it}.pth")
-
-    def test(self):
-        end_row = input("Plead enter the target row: ")
-        end_col = input("Plead enter the target col: ")
-        grid_world = np.zeros((32, 32, 3), dtype=np.float32)
-
-        # draw start
-        grid_world[17, 17, 1] = 1.0
-
-        # draw target
-        h_dist_map = np.abs(np.arange(32) - int(end_row))
-        v_dist_map = np.abs(np.arange(32) - int(end_col))
-        dist_map = np.sqrt(h_dist_map ** 2 + v_dist_map[:, np.newaxis] ** 2)
-        dist_map = 1 - dist_map / np.max(dist_map)
-
-        grid_world[:, :, 0] = dist_map
-
-        def onClikDrawObstacle(event, x, y, flags, param):
-            if event == cv2.EVENT_LBUTTONDOWN or event == cv2.EVENT_MOUSEMOVE and flags == cv2.EVENT_FLAG_LBUTTON:
-                row = y // 8
-                col = x // 8
-                grid_world[row, col, 2] = 1.0
-                temp = cv2.resize(grid_world, dsize=None, fx=8, fy=8, interpolation=cv2.INTER_NEAREST)
-                cv2.imshow("Grid World", temp)
-
-
-        cv2.namedWindow("Grid World")
-        temp = cv2.resize(grid_world, dsize=None, fx=8, fy=8, interpolation=cv2.INTER_NEAREST)
-        cv2.imshow("Grid World", temp)
-        cv2.setMouseCallback("Grid World", onClikDrawObstacle)
-
-        k = 0
-        while k != ord(" "):
-            k = cv2.waitKey(1)
-
-        cv2.destroyAllWindows()
-
-        grid_world = torch.tensor(grid_world, dtype=torch.float32, device="cuda").permute(2, 0, 1).unsqueeze(0)
-        # (1, 3, 32, 32)
-
-        self.model.eval()
-        with torch.no_grad():
-            is_done = False
-            step = 0
-            k = 0
-            while not is_done:
-                action = self.model.getAction(grid_world, 0, 0)     # take an action greedy to the policy
-                next_grid_world, reward, is_done = self.step(grid_world, action)
-
-                k = self.visualize((grid_world, action, reward, next_grid_world, is_done), step, 0)
-
-                if k == ord("q"):
-                    break
-
-                grid_world = next_grid_world
-                step += 1
-
-
+                        saveModel(self.model, f"Checkpoints/PathFinder/{train_it}.pth")
 
 
 if __name__ == '__main__':
     with open("config_with_mem.yaml", 'r') as in_file:
         configs = yaml.load(in_file, Loader=yaml.FullLoader)
 
-    os.makedirs(f"Checkpoints/PF", exist_ok=True)
+    # dataset = MemoryDataset(configs["data_folders"])
+    # for i in range(0, len(dataset), 100):
+    #     lidar_map = dataset.getSource(i)
+    #     test_grid_world = dataset[i]
+    #     grid_world_np = cv2.resize(test_grid_world[0].permute(1, 2, 0).cpu().numpy(), (512, 512), interpolation=cv2.INTER_NEAREST)
+    #     lidar_map_np = cv2.resize(lidar_map[0].permute(1, 2, 0).cpu().numpy(), (512, 512), interpolation=cv2.INTER_NEAREST)
+    #     cv2.imshow("lidar map", lidar_map_np)
+    #     cv2.imshow("grid world", grid_world_np)
+    #     cv2.waitKey()
 
+    os.makedirs(f"Checkpoints/PathFinder", exist_ok=True)
     path_finder = PathFinder(configs)
-    # path_finder.test()
     path_finder.train()

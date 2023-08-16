@@ -3,6 +3,7 @@ from Models.ModelUtils import *
 import random
 import numpy as np
 import cv2
+from itertools import product
 
 
 class OutputHead(nn.Module):
@@ -30,13 +31,15 @@ class OutputHead(nn.Module):
         return self.s2(torch.cat([x, spatial_feature], dim=1))
 
 
-class DecisionNet(nn.Module):
+class LocalPathPlanner(nn.Module):
     # Just output action values
     def __init__(self):
         super().__init__()
 
+        # input size: (B, 3, 21, 21)
         self.shared = nn.Sequential(
-            ConvNormAct(3, 64, k=3, s=2, p=1),  # (B, 64, 16, 16)
+            ConvNormAct(3, 32, k=3, s=1, p=0),  # (B, 64, 19, 19)
+            ConvNormAct(32, 64, k=4, s=1, p=0),  # (B, 64, 16, 16)
             FasterNetBlock(64),
             FasterNetBlock(64),
             ConvNormAct(64, 128, k=3, s=2, p=1),  # (B, 128, 8, 8)
@@ -44,14 +47,15 @@ class DecisionNet(nn.Module):
             FasterNetBlock(128),
             ConvNormAct(128, 256, k=3, s=2, p=1),  # (B, 256, 4, 4)
             nn.Conv2d(256, 512, kernel_size=4, stride=1, padding=0),  # (B, 512, 1, 1)
+            nn.LeakyReLU(inplace=True),
             nn.Flatten()
         )
 
         self.actor = nn.Sequential(
-            nn.Linear(512, 256), nn.ReLU(inplace=True),
-            nn.Linear(256, 128), nn.ReLU(inplace=True),
-            nn.Linear(128, 64), nn.ReLU(inplace=True),
-            nn.Linear(64, 32), nn.ReLU(inplace=True),
+            nn.Linear(512, 256), nn.LeakyReLU(inplace=True),
+            nn.Linear(256, 128), nn.LeakyReLU(inplace=True),
+            nn.Linear(128, 64), nn.LeakyReLU(inplace=True),
+            nn.Linear(64, 32), nn.LeakyReLU(inplace=True),
             nn.Linear(32, 5),
             nn.Softmax(dim=1)
         )
@@ -112,20 +116,23 @@ class RLPathModel(nn.Module):
         - Policy (speed_mu, speed_std, steer_mu, steer_std)
         - State Value V(s): (B)
     """
-
-
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     def __init__(self, decision_net_weight: str, n_path_steps: int=10, debug: bool=False):
         super().__init__()
         # this part si already trained
         # During, training, this is applied multiple times just to output the path
         self.path_steps = n_path_steps
-        self.path_model = DecisionNet()
+        self.path_model = LocalPathPlanner()
         self.path_model.load_state_dict(torch.load(decision_net_weight))
         self.path_model.eval()
         self.debug = debug
 
         self.body = nn.Sequential(
-            ConvNormAct(3, 128, k=3, s=1, p=1),  # (3, 16, 16) -> (128, 16, 16)
+            ConvNormAct(6, 64, k=3, s=2, p=1),  # (3, 64, 64) -> (64, 32, 32)
+            FasterNetBlock(64),
+            FasterNetBlock(64),
+
+            ConvNormAct(64, 128, k=3, s=2, p=1),  # (64, 32, 32) -> (128, 16, 16)
             FasterNetBlock(128),
             FasterNetBlock(128),
 
@@ -162,25 +169,25 @@ class RLPathModel(nn.Module):
         """
         # step_filter weight shape: (1, 1, 3, 3)
         # after applying corresponding weight to the grid_world[:, 1, ...], the result is the next step
-        self.step_filters = nn.ModuleList([nn.Conv2d(1, 1, kernel_size=3, stride=1, padding=1, bias=False).to("cuda") for _ in range(5)])
+        self.step_filters = nn.ModuleList([nn.Conv2d(1, 1, kernel_size=3, stride=1, padding=1, bias=False).to(self.device) for _ in range(5)])
 
-        up_weight = torch.zeros((1, 1, 3, 3), dtype=torch.float32, device="cuda")
+        up_weight = torch.zeros((1, 1, 3, 3), dtype=torch.float32, device=self.device)
         up_weight[:, :, 2, 1] = 1
         self.step_filters[0].weight.data = up_weight
 
-        right_weight = torch.zeros((1, 1, 3, 3), dtype=torch.float32, device="cuda")
+        right_weight = torch.zeros((1, 1, 3, 3), dtype=torch.float32, device=self.device)
         right_weight[:, :, 1, 0] = 1
         self.step_filters[1].weight.data = right_weight
 
-        down_weight = torch.zeros((1, 1, 3, 3), dtype=torch.float32, device="cuda")
+        down_weight = torch.zeros((1, 1, 3, 3), dtype=torch.float32, device=self.device)
         down_weight[:, :, 0, 1] = 1
         self.step_filters[2].weight.data = down_weight
 
-        left_weight = torch.zeros((1, 1, 3, 3), dtype=torch.float32, device="cuda")
+        left_weight = torch.zeros((1, 1, 3, 3), dtype=torch.float32, device=self.device)
         left_weight[:, :, 1, 2] = 1
         self.step_filters[3].weight.data = left_weight
 
-        idle_weight = torch.zeros((1, 1, 3, 3), dtype=torch.float32, device="cuda")
+        idle_weight = torch.zeros((1, 1, 3, 3), dtype=torch.float32, device=self.device)
         idle_weight[:, :, 1, 1] = 1
         self.step_filters[4].weight.data = idle_weight
 
@@ -202,29 +209,28 @@ class RLPathModel(nn.Module):
 
     def lidarMap2GridWorld(self, lidar_map):
         # lidar map: (B, 3, 127, 127)
-        blur_map = lidar_map[:, 2, ...].unsqueeze(1)  # (B, 1, 127, 127)
-        blur_map = blur_map * (blur_map > 0.2)
-        blur_map = func.max_pool2d(blur_map, kernel_size=3, stride=1, padding=1)
-        blur_map = func.max_pool2d(blur_map, kernel_size=3, stride=1, padding=1)     # (B, 1, 127, 127)
+        obstacle_map = (lidar_map[:, 2, ...] > 0.4).unsqueeze(1)  # (B, 1, 127, 127)
 
-        danger_map = func.max_pool2d((blur_map > 0.4).to(torch.float32), kernel_size=4, stride=4, padding=2).squeeze(1)     # (B, 32, 32)
+        danger_map = func.max_pool2d(obstacle_map.to(torch.float32), kernel_size=6, stride=6).squeeze(1)  # (B, 32, 32)
 
         # get all target locations
         target_locations = torch.argmax(lidar_map[:, 0].flatten(1), dim=1)  # argmax(B, 127*127) -> (B)
-        target_rows = target_locations // 127 // 4   # (B)
-        target_cols = target_locations % 127 // 4    # (B)
+        target_rows = target_locations // 127 // 6  # (B)
+        target_cols = target_locations % 127 // 6  # (B)
 
         # Horizontal distance from target point (B, 32)
-        h_dist = torch.abs(torch.arange(32, dtype=torch.float32, device=lidar_map.device).view(1, -1) - target_cols.view(-1, 1))
+        h_dist = torch.abs(
+            torch.arange(21, dtype=torch.float32, device=lidar_map.device).view(1, -1) - target_cols.view(-1, 1))
         # Vertical distance from target point (B, 32)
-        v_dist = torch.abs(torch.arange(32, dtype=torch.float32, device=lidar_map.device).view(1, -1) - target_rows.view(-1, 1))
+        v_dist = torch.abs(
+            torch.arange(21, dtype=torch.float32, device=lidar_map.device).view(1, -1) - target_rows.view(-1, 1))
         # dist_map: (B, 32, 32)
         dist_map = torch.sqrt(h_dist[:, None, :] ** 2 + v_dist[:, :, None] ** 2)
 
-        grid_world = torch.zeros((lidar_map.shape[0], 3, 32, 32), dtype=torch.float32, device=lidar_map.device)
+        grid_world = torch.zeros((lidar_map.shape[0], 3, 21, 21), dtype=torch.float32, device=lidar_map.device)
         grid_world[:, 0] = 1 - dist_map / torch.max(dist_map.flatten(0), dim=0).values.view(-1, 1, 1)
-        grid_world[:, 1, 16, 16] = 1    # agent location
-        grid_world[:, 2] = danger_map   # danger map
+        grid_world[:, 1, 9, 10] = 1  # agent location
+        grid_world[:, 2] = danger_map  # danger map
 
         return grid_world
 
@@ -243,23 +249,27 @@ class RLPathModel(nn.Module):
 
         # all target channels
         target_channel = grid_world_list[0][:, 0]   # (B, 32, 32)
-        # 11 * (B, 32, 32) -> (11, B, 32, 32) -> (B, 32, 32)
-        path_channel = torch.max(torch.stack([grid_world_list[i][:, 1] for i in range(self.path_steps + 1)]), dim=0).values
-        obstacle_channel = grid_world_list[0][:, 2]   # (B, 32, 32)
-        return torch.stack([target_channel, path_channel, obstacle_channel], dim=1)  # (B, 3, 32, 32)
+        # 11 * (B, 21, 21) -> (11, B, 21, 21) -> (B, 21, 21)
+        path_channel = torch.max(torch.stack([grid_world_list[i][:, 1] * ((self.path_steps - i) / self.path_steps) for i in range(self.path_steps + 1)]), dim=0).values
+        obstacle_channel = grid_world_list[0][:, 2]   # (B, 21, 21)
+        return torch.stack([target_channel, path_channel, obstacle_channel], dim=1)  # (B, 3, 21, 21)
 
 
     def forward(self, lidar_map, spatial_features):
         with torch.no_grad():
-            grid_world_with_path = self.generatePath(lidar_map)  # (B, 3, 32, 32)
-            surrounding_with_path = grid_world_with_path[:, :, 8:24, 8:24].detach()  # (B, 3, 16, 16)
+            grid_world_with_path = self.generatePath(lidar_map)  # (B, 3, 21, 21)
+            surrounding_with_path = grid_world_with_path[:, :, 5:16, 5:16].detach()  # (B, 3, 11, 11)
+            surrounding_with_path = func.interpolate(surrounding_with_path, size=(62, 62), mode="bilinear")  # (B, 3, 62, 62)
+            surrounding_lidar_map = lidar_map[:, :, 32:94, 32:94]  # (B, 3, 62, 62)
             if self.debug:
-                temp = np.ones((32, 65, 3), dtype=np.float32)
-                temp[:, :32] = grid_world_with_path[0].detach().permute(1, 2, 0).cpu().numpy()
-                temp[:, 33:] = cv2.resize(temp[8:24, 8:24], (32, 32), interpolation=cv2.INTER_NEAREST)
+                temp = np.ones((62, 124, 3), dtype=np.float32)
+                temp[:, :62] = surrounding_with_path[0].detach().permute(1, 2, 0).cpu().numpy()
+                temp[:, 62:] = surrounding_lidar_map[0].detach().permute(1, 2, 0).cpu().numpy()
                 cv2.imshow("grid_world", cv2.resize(temp, (520, 256), interpolation=cv2.INTER_NEAREST))
 
-        shared_features = self.body(surrounding_with_path)  # (B, 256, 8, 8)
+        surroundings = torch.cat([surrounding_lidar_map, surrounding_with_path], dim=1)  # (B, 6, 62, 62)
+
+        shared_features = self.body(surroundings)  # (B, 256, 8, 8)
 
         V_s = self.value_head(shared_features, spatial_features).flatten(0)
 
@@ -276,18 +286,28 @@ class RLPathModel(nn.Module):
 
 
 if __name__ == '__main__':
+    from torchstat import stat
 
-    model = RLPathModel("Checkpoints/PF/20230809-122943/180000.pth", 20).cuda()
+    RLPathModel.device = torch.device("cpu")
+    model = RLPathModel("Checkpoints/PathFinder/210000.pth", 10, debug=True)
 
-    dummy_input = torch.zeros(2, 3, 127, 127, device="cuda")
-    dummy_input[0, 0, 100, 100] = 1   # target is at (5, 5)
-    dummy_input[0, 2, [20, 25, 30, 35, 40], [40, 35, 30, 25, 20]] = 1     # obstacles
+    # stat(model.path_model, (3, 21, 21))
+    stat(model, (3, 127, 127))
 
-    dummy_input[1, 0, 20, 20] = 1   # target is at (120, 120)
+    # dummy_input = torch.zeros(2, 3, 127, 127, device="cuda")
+    # dummy_input[0, 0, 100, 100] = 1   # target is at (5, 5)
+    # dummy_input[0, 2, [20, 25, 30, 35, 40], [40, 35, 30, 25, 20]] = 1     # obstacles
+    #
+    # dummy_input[1, 0, 20, 20] = 1   # target is at (120, 120)
+    #
+    # dummy_input[:, 2, 64, 74] = 1
+    #
+    # dummy_spatial_feature = torch.randn(2, 5, device="cuda")
+    #
+    # print(model(dummy_input, dummy_spatial_feature))
+    # cv2.waitKey(0)
 
-    dummy_spatial_feature = torch.randn(2, 5, device="cuda")
 
-    print(model(dummy_input, dummy_spatial_feature))
 
 
 

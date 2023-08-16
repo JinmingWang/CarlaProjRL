@@ -6,18 +6,20 @@
 - town02_1: Many turnings
 - town02_2: Many turnings
 - town02_3: Bad beginning
-- town02_4: Collision beginning
+- ~~town02_4: Collision beginning~~ (invalid)
 - town02_5: Very far away beginning
 - town02_6: Bag beginning
 - town02_7: Far away bad beginning
 
-- town03_1: tricky, sparsity = 30
-- town03_2: tricky, sparsity = 30
-- town03_3: sparsity = 5
-
-- town04_1: Long straight, sparsity=2
-- town04_2: Normal
-- town04_3: Normal
+> The town03 and town04 routes are not good for training and testing for now, because the route generation has 
+  strange behaviors: the route is not monotonic, it sometimes involves making the ego vehicle to back and forth for 
+  multiple times, especially at turnings. Town05 also has this problem but rarely.
+- ~~town03_1: tricky, sparsity = 30~~
+- ~~town03_2: tricky, sparsity = 30~~
+- ~~town03_3: sparsity = 5~~
+- ~~town04_1: Long straight, sparsity=2~~
+- ~~town04_2: Normal~~
+- ~~town04_3: Normal~~
 
 - town05_1: Normal
 - town05_2: Begin with backward

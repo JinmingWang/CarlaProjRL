@@ -1,7 +1,6 @@
 # Train data with memory loaded from disk instead of interacting with environment
 
 import os
-from typing import Tuple
 
 from torch import Tensor
 
@@ -12,7 +11,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
-import cv2
+
 
 class MemoryDataset(Dataset):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -48,6 +47,11 @@ class MemoryDataset(Dataset):
 
 
 def collectFunc(batch: List[Tuple[VehicleState, VehicleAction, float, VehicleState, bool]]) -> List[Tensor]:
+    """
+    Pack dataset list data into a batch
+    :param batch: A list of data loaded
+    :return: Batch data that can be directly used in training
+    """
     lidar_maps = []
     spatial_features = []
     actions = []
